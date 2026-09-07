@@ -251,3 +251,23 @@ def test_spatial_key_opt_in(toy_spatial: AnnData) -> None:
     assert not isclose(unweighted["lr_means"].sum(), weighted["lr_means"].sum())
     with pytest.raises(KeyError, match="not found in `adata.obsm`"):
         cellphonedb(toy_spatial, groupby="bulk_labels", n_perms=None, use_raw=True, spatial_key="missing")
+
+
+def test_spatial_key_weights_pvals(toy_spatial: AnnData) -> None:
+    """Proximity has to reach the p-values, not just the magnitudes.
+
+    Weighting the permuted null by the same factor as the observed score cancels out of
+    `perm * w >= obs * w`, which left every p-value untouched.
+    """
+    keys = ["source", "target", "ligand_complex", "receptor_complex"]
+
+    unweighted = cellphonedb(toy_spatial, groupby="bulk_labels", n_perms=50, use_raw=True, inplace=False)
+    weighted = cellphonedb(
+        toy_spatial, groupby="bulk_labels", n_perms=50, use_raw=True, inplace=False, spatial_key="spatial"
+    )
+    assert unweighted is not None and weighted is not None
+
+    merged = unweighted.merge(weighted, on=keys, suffixes=("_unweighted", "_weighted"))
+
+    assert not merged["cellphone_pvals_unweighted"].equals(merged["cellphone_pvals_weighted"])
+    assert (merged["cellphone_pvals_weighted"] >= merged["cellphone_pvals_unweighted"]).all()

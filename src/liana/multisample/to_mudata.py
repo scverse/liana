@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import warnings as warnings
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -78,7 +78,6 @@ def adata_to_views(
     prefixed with its view, and `obs_keys` are joined onto the sample-level `.obs`.
     Pass `filter_by_expr_kwargs` to tighten or relax those filters -- they go
     straight to `decoupler`.
-
     """
     # Check if MuData & decoupler are installed
     if filter_by_prop_kwargs is None:
@@ -245,7 +244,6 @@ def lrs_to_views(
     interactions by sample. The thresholds are relaxed below their defaults here
     only because the toy scores are random and no view would otherwise survive
     them -- on real data the defaults are the sensible starting point.
-
     """
     if (sample_key not in adata.obs.columns) or (sample_key not in adata.uns[uns_key].columns):
         raise ValueError(
@@ -395,7 +393,6 @@ def lrdata_to_mudata(
 
     The sender in each `'sender^ligand^receptor'` name becomes one modality, so that
     every sender cell type can be modelled as its own view.
-
     """
     if not isinstance(lrdata, AnnData):
         raise TypeError("`lrdata` must be an AnnData object.")
@@ -489,7 +486,7 @@ def _remove_mod_var(
         negative_markers = [marker for mod in markers.keys() if mod != current_mod for marker in markers[mod]]
 
         if current_mod not in list(markers.keys()):
-            warnings.warn(f"no markers in dict for view: {current_mod}", Warning, stacklevel=2)
+            warnings.warn(f"no markers in dict for view: {current_mod}", UserWarning, stacklevel=2)
         else:
             # keep negative_markers not in markers[current_mod] and add view_sep
             negative_markers = [
@@ -575,7 +572,6 @@ def filter_view_markers(
 
     Pass `var_column='highly_variable'` instead to only flag them, and
     `inplace=True` to modify `mdata` rather than return a copy.
-
     """
     # check if markers is a dict
     if not isinstance(markers, dict):

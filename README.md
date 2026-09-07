@@ -1,16 +1,16 @@
-# LIANA+: an all-in-one cell-cell communication framework <img src="https://raw.githubusercontent.com/scverse/liana-py/main/docs/_static/logo.png" align="right" height="125">
+# LIANA+: an all-in-one cell-cell communication framework <img src="https://raw.githubusercontent.com/scverse/liana/main/docs/_static/logo.png" align="right" height="125">
 
 <!-- badges: start -->
-[![main](https://github.com/scverse/liana-py/actions/workflows/test.yml/badge.svg)](https://github.com/scverse/liana-py/actions)
-[![GitHub issues](https://img.shields.io/github/issues/scverse/liana-py.svg)](https://github.com/scverse/liana-py/issues/)
+[![main](https://github.com/scverse/liana/actions/workflows/test.yml/badge.svg)](https://github.com/scverse/liana/actions)
+[![GitHub issues](https://img.shields.io/github/issues/scverse/liana.svg)](https://github.com/scverse/liana/issues/)
 [![Documentation Status](https://readthedocs.org/projects/liana-py/badge/?version=latest)](https://liana-py.readthedocs.io/en/latest/?badge=latest)
-[![codecov](https://codecov.io/gh/scverse/liana-py/graph/badge.svg?token=2HvdhecFQU)](https://codecov.io/gh/scverse/liana-py)
+[![codecov](https://codecov.io/gh/scverse/liana/graph/badge.svg?token=2HvdhecFQU)](https://codecov.io/gh/scverse/liana)
 [![Downloads](https://static.pepy.tech/badge/liana)](https://pepy.tech/project/liana)
 <!-- badges: end -->
 
 LIANA+ is a scalable framework that adapts and extends existing methods and knowledge to study cell-cell communication in single-cell, spatially-resolved, and multi-modal omics data. It is part of the [scverse ecosystem](https://github.com/scverse), and relies on [AnnData](https://github.com/scverse/anndata) & [MuData](https://github.com/scverse/mudata) objects as input.
 
-<img src="https://raw.githubusercontent.com/scverse/liana-py/main/docs/_static/abstract.png" width="700" align="center">
+<img src="https://raw.githubusercontent.com/scverse/liana/main/docs/_static/abstract.png" width="700" align="center">
 
 ## Contributions
 
@@ -32,6 +32,8 @@ The command comes with `pip install liana`, so run it from any Python environmen
 ## Decision Tree
 
 Use the tree below to find a starting point for your analysis. Broad, data-driven choices sit at the top and trickle down to specific methods (click a node to open its tutorial).
+
+<!-- decision-tree-start -->
 
 ```mermaid
 flowchart TD
@@ -68,10 +70,10 @@ flowchart TD
     SCMulti --> Metab[Metabolite-mediated CCC]
 
     %% ===== Styling =====
-    classDef decision fill:#f5f5f5,stroke:#37474f,stroke-width:1px,color:#263238;
-    classDef spatial fill:#e3f2fd,stroke:#1565c0,color:#0d47a1;
-    classDef dissoc fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20;
-    classDef multimodal fill:#f3e5f5,stroke:#6a1b9a,color:#4a148c;
+    classDef decision fill:#f6f0f1,stroke:#364159,stroke-width:1px,color:#364159;
+    classDef spatial fill:#e0fbf8,stroke:#00786e,color:#05564f;
+    classDef dissoc fill:#fdeef4,stroke:#ba1b57,color:#7c1039;
+    classDef multimodal fill:#e9ecf3,stroke:#4a587a,color:#2a3348;
     classDef external fill:#ffffff,stroke:#9e9e9e,stroke-dasharray:5 3,color:#424242;
 
     class Start,Res,ScType,SpType,LocalQ,Compare,Contrast,ModalSp decision;
@@ -99,6 +101,8 @@ flowchart TD
     click SCMulti "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/sc_multi.html"
     click Metab "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/sc_multi.html#metabolite-mediated-ccc-from-transcriptomics-data"
 ```
+
+<!-- decision-tree-end -->
 
 This tree is a guide rather than an exhaustive map: the methods are modular and can be adapted or combined across data types and questions, and all of them typically build on curated prior knowledge (see the [prior knowledge](https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/prior_knowledge.html) tutorial for working with ligand–receptor and other resources).
 
@@ -140,8 +144,8 @@ Please also consider citing any of the methods and/or resources that were partic
 
 [uv]: https://github.com/astral-sh/uv
 [scverse discourse]: https://discourse.scverse.org/
-[issue tracker]: https://github.com/scverse/liana-py/issues
-[tests]: https://github.com/scverse/liana-py/actions/workflows/test.yml
+[issue tracker]: https://github.com/scverse/liana/issues
+[tests]: https://github.com/scverse/liana/actions/workflows/test.yml
 [documentation]: https://liana-py.readthedocs.io
 [changelog]: https://liana-py.readthedocs.io/en/latest/changelog.html
 [api documentation]: https://liana-py.readthedocs.io/en/latest/api.html

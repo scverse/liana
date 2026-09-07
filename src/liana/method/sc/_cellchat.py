@@ -37,11 +37,10 @@ def _cellchat_score(
     Returns
     -------
     A tuple with lr_mean and pvalue for x
-
     """
     lr_prob = _lr_probability((x["ligand_trimean"].to_numpy(), x["receptor_trimean"].to_numpy()))
-    lr_prob, proximity_weights = _apply_proximity_weights(lr_prob, x)
-    cellchat_pvals = _calculate_pvals(lr_prob, perm_stats, _lr_probability, proximity_weights)
+    lr_prob = _apply_proximity_weights(lr_prob, x)
+    cellchat_pvals = _calculate_pvals(lr_prob, perm_stats, _lr_probability)
 
     return lr_prob, cellchat_pvals
 

@@ -1,11 +1,10 @@
-import os
-import urllib.request
 from itertools import product
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-from liana._core._common import _logg
+import pooch
+import scanpy as sc
 
 _HCOP_BASE = "https://storage.googleapis.com/public-download-files/hcop"
 
@@ -129,7 +128,6 @@ def translate_column(
     With `replace=False` the translation is added as an `orthology_ligand` column
     instead of overwriting `ligand`. Use
     :func:`liana.rs.translate_resource` to do both sides at once.
-
     """
     if not isinstance(one_to_many, int):
         raise ValueError("`one_to_many` should be a positive integer!")
@@ -202,7 +200,6 @@ def translate_resource(
     0  Lgals9    Ptprc
     1  Lgals9      Met
     2  Lgals9     Cd44
-
     """
     if columns is None:
         columns = ["ligand", "receptor"]
@@ -216,7 +213,7 @@ def translate_resource(
 def get_hcop_orthologs(
     target_organism: str = "mouse",
     url: str | None = None,
-    filename: str | None = None,
+    filename: str | Path | None = None,
     min_evidence: int = 3,
     columns: list[str] | None = None,
 ) -> pd.DataFrame:
@@ -270,19 +267,18 @@ def get_hcop_orthologs(
             columns=["human_symbol", "mouse_symbol"],
             min_evidence=3,
         ).rename(columns={"human_symbol": "source", "mouse_symbol": "target"})
-
     """
     if url is None:
         url = f"{_HCOP_BASE}/human_{target_organism}_hcop_fifteen_column.txt.gz"
     # check if exists
     if filename is None:
-        filename = os.path.basename(url.split("/")[-1])
-    if not os.path.exists(filename):
-        urllib.request.urlretrieve(url, filename)
+        path = Path(pooch.retrieve(url, known_hash=None, fname=url.rsplit("/", 1)[-1], path=sc.settings.datasetdir))
     else:
-        _logg(f"File {filename} already exists. Skipping download.", level="info")
+        path = Path(filename)
+        if not path.exists():
+            pooch.retrieve(url, known_hash=None, fname=path.name, path=path.parent)
 
-    mapping = pd.read_csv(filename, sep="\t")
+    mapping = pd.read_csv(path, sep="\t")
     mapping["evidence"] = mapping["support"].apply(lambda x: len(x.split(",")))
     mapping = mapping[mapping["evidence"] >= min_evidence]
 

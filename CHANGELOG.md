@@ -1,9 +1,43 @@
 # Changelog
 
-## 2.0.0 (28.08.2026)
+## 2.0.0 (unreleased)
+
+liana+ now has a new home under the scverse organisation.
 
 ### Changed
-- liana+ now has a new home under the scverse organisation.
+
+- **`matplotlib.pyplot.show` is banned in `src`.** The hang fixed in `li.pl.annulus` was invisible to CI, which runs headless and so turns `show` into a no-op -- the call only blocks where someone has a display. A lint rule catches the next one at the point it is written rather than at the point a user runs it.
+
+- **LRIC groups its edge list by counting sort.** The group key is a cell-type pair crossed with a radius tile, so it spans a few hundred values over tens of millions of edges; placing each edge in one pass beats paying a factor of `log(n_edges)` for the same order. Ascending traversal keeps ties in input order, so the result matches the stable sort it replaces exactly, and the group offsets fall out of the histogram rather than a second search over the sorted keys. `li.mt.lric(groupby=...)` goes from 5.4 s to 3.2 s on 14k spots over 36M edges.
+
+- **Binning that edge list no longer doubles peak memory.** Dropping self-pairs, assigning tiles and compacting used to be a chain of numpy expressions, each allocating a full-length intermediate; one pass that counts and then fills allocates only what it returns. Peak drops from 1954 MB to 1013 MB for the same 579 MB of edges, and the result is unchanged.
+
+- **The permutation null no longer carries an untested fallback.** The compiled trimean kernel assumed a non-negative expression matrix, so anything else -- a scaled `layer`, say -- fell back to aggregating gathered rows, a path no test ever reached. Splicing the implicit zeros in at the position they sort to, rather than assuming they come first, covers negative values too, which removes the fallback, its dispatch and `joblib` from the module.
+
+- **`MethodMeta` no longer keeps a registry of every instance ever built.** The class held a list of weak references, appended to in `__init__` and never pruned, only to answer `li.mt.get_method_scores()`: 20 entries for the 9 methods liana ships, since a `Method` and the `MethodMeta` it wraps each registered, growing without bound as methods are constructed, and defining a custom method silently changed the scores reported for the whole process. The scores are known where the methods are defined, so they are read from there. This also drops the import-order constraint `liana/__init__.py` documented.
+
+- **Permutation nulls are built by compiled kernels instead of `joblib`.** Both the mean and the trimean null read the CSR buffers directly, one pass over the non-zeros per permutation, and never materialise a permuted copy of the matrix; the trimean sorts each gene's stored entries rather than densifying the group. On 50k cells x 600 genes x 200 permutations, the mean null goes from 2.8 s to 0.45 s and CellChat's trimean null from 68 s to 4.5 s (8 threads). `n_jobs` previously made the permutations *slower* than serial, because a task per permutation re-pickled the sparse matrix each time. Results are unchanged for the trimean and now depend only on `seed`, never on `n_jobs`; the mean null sums in double precision where it previously inherited scipy's single-precision accumulation.
+
+- **A sample carrying a single cluster now yields `p = 1` throughout.** Every permutation leaves that cluster's membership untouched, so it has to score exactly as the observation does, but the observed and permuted sides are accumulated by different routines and the tie did not survive that. Permuted scores within single-precision resolution of the observed one now count as tied. Only reachable where a `sample_key` split, or `min_cells`, leaves one cluster standing; on the toy data this moved 9 of 2115 `by_sample` rows off values that were pure float noise.
+
+- **`liana.pl` plot names follow one convention.** Plot functions are bare nouns, as in `scanpy.pl`, and carry the prefix of the method they belong to when they only apply to it. The old names still resolve, via `scverse_misc.deprecated`, so a type checker flags them and calling one raises a `FutureWarning`:
+
+  | Was | Now |
+  |---|---|
+  | `li.pl.circle_plot` | `li.pl.circle` |
+  | `li.pl.annulus_plot` | `li.pl.annulus` |
+  | `li.pl.lric_divergence_plot` | `li.pl.lric_divergence` |
+  | `li.pl.target_metrics` | `li.pl.misty_target_metrics` |
+  | `li.pl.contributions` | `li.pl.misty_contributions` |
+  | `li.pl.interactions` | `li.pl.misty_interactions` |
+
+- **`liana_pipe` was split into named stages.** Assembling the ligand-receptor statistics, scoring them and aggregating across methods are now three functions rather than one 616-line one with five underscore-prefixed pseudo-private parameters. The consensus path has its own entry point (`liana_pipe_consensus`), so `liana_pipe` no longer dispatches on `_score.method_name == "Rank_Aggregate"` and always returns a `DataFrame`. Internal only -- `li.mt.*` and `li.mt.rank_aggregate` are unchanged.
+
+- **`li.mt.lric(pair_chunk=...)` is deprecated and ignored.** The weighted numerator is accumulated by a compiled kernel that holds no per-chunk temporaries, so there is nothing left to tune for memory. The same change makes it about 10x faster (3.7 s to 0.4 s on 2M edges x 500 pairs).
+
+- Locating ligands, receptors and cluster labels in the expression matrix uses `Index.get_indexer` instead of a `numpy.where` scan per interaction, which was quadratic in the number of interactions (1.42 s to 0.005 s for 60k interactions over 2k genes). An interaction naming a gene absent from `adata.var_names` now raises `KeyError` instead of silently indexing from the end.
+
+- Permutation progress bars track completed permutations. They previously wrapped the submission generator, so the bar filled immediately and then stalled.
 
 - **`li.ms.nmf` no longer draws the elbow plot** (#99). The error curve is stored in `adata.uns["nmf_errors"]` as before; plot it with the new `li.pl.elbow`, which returns the figure like every other `li.pl` function.
 
@@ -23,11 +57,12 @@
 - The six namespaces are also importable directly (`import liana.ms`, `import liana.pp`, …); the removed aliases (`import liana.ut` / `liana.mu` / `liana.testing`) no longer resolve — update both attribute access and direct imports.
 - **Breaking: `use_raw` now defaults to `False` (was `True`) everywhere.** Methods read `adata.X` by default instead of `adata.raw.X`, aligning with the scverse ecosystem (scanpy auto/`None`, squidpy/decoupler `False`), where log-normalised expression is expected in `.X`. Pass `use_raw=True` explicitly to keep reading `.raw`. Relatedly, `li.ds.generate_toy_adata`/`generate_toy_spatial` now ship log-normalised expression in `.X` (matching `generate_toy_mdata`), so the default path works on valid data.
 - **Internal: shared machinery consolidated into a private `liana._core` package.** `liana._common`, `_constants` and `_docs` moved under `liana._core`, and the pipeline internals (`_pipe_utils`: `_pre`, `_aggregate`, `_get_mean_perms`, …) moved out of `liana.method` into `liana._core`. The public subpackages now depend on `_core` rather than reaching into one another, removing cross-imports between `method`/`multisample`/`plotting`/`preprocessing`/`resource`. No user-facing symbols changed.
-- Resolved #218
 - **Breaking: spatial proximity weighting in the single-cell methods is opt-in** (#255). `spatial_key` now defaults to `None` for all `li.mt` methods and `rank_aggregate` (the methods previously weighted silently whenever `obsm["spatial"]` existed; `rank_aggregate` never did). Passing a key that is not in `adata.obsm` raises `KeyError` instead of silently skipping the weighting.
 - **Typed codebase (#255).** Synced with the scverse cookiecutter template; `mypy` runs in pre-commit and CI; `.toarray()`/`.A` replaced by `fast-array-utils`. Output is unchanged. Two `_expm1_base` test expectations were corrected: the old tests passed `(base, X)` in swapped order.
 - `docrep` replaced by a small in-house docstring processor; an unknown placeholder now raises at import instead of warning.
 - **Proportion thresholds standardised.** `nz_prop` (proportion of *all* observations with a non-zero value) and `expr_prop` (proportion *within each cell-type group*) are now distinct, and both defaults live in `DefaultValues` (`liana._core._constants`). `expr_prop` now defaults to `0.05` (was `0.1`) across all single-cell methods, `rank_aggregate`, `li.mt.df_to_lr` and `li.mt.lric`'s directed (`groupby`) mode; `nz_prop` defaults to `0.05` and is shared by `li.mt.bivariate`, `li.mt.inflow` (was `0.001`) and `li.mt.lric`'s cell-type-agnostic mode (previously unmasked, `0.0`). `li.mt.lric` gained `nz_prop` for its agnostic mode, while its `expr_prop` now only applies when `groupby` is set.
+
+- liana+ repository moved from saezlab/liana-py to scverse/liana.
 
 ### Added
 
@@ -35,17 +70,30 @@
 
 ### Fixed
 
+- **`li.rs.get_metalinks` and `li.rs.get_hcop_orthologs` no longer download into the working directory.** Both wrote their file to `os.getcwd()`, so calling either from a checkout dropped an untracked artifact into the repo, changing directory silently re-downloaded, and two processes in one directory raced on the same path. Both go through :func:`pooch.retrieve` now, as the rest of scverse does, caching under :attr:`scanpy.settings.datasetdir` alongside what `li.ds` fetches; `_download_metalinksdb` takes a `cache_dir` for callers that want their own. MetaLinksDB is checked against a pinned `sha256`, so a truncated or corrupted copy is re-fetched rather than served from the cache forever -- the previous code only rejected a file of length zero. Neither call had passed a timeout, so a stalled server blocked indefinitely.
+
+- `li.rs.get_metalinks_values` opened two connections to the database and closed one.
+
+- **`li.pl.annulus` returns its figure instead of calling `matplotlib.pyplot.show`.** Showing from inside a library takes the decision away from the caller, and under an interactive backend it blocks in the GUI event loop -- which hung the function indefinitely in any script, and hid only because a headless backend turns `show` into a no-op. It takes `return_fig` and returns a `Figure`, as the rest of `li.pl` does; a notebook still renders it, and a script decides for itself when to show.
+
+- **Argument validation no longer runs on `assert`.** Eight checks on user input were assertions, which `python -O` strips, letting bad input through silently; several carried no message. They raise `ValueError` or `KeyError` now, as do the six places that raised `AssertionError` for a bad argument -- `except ValueError` around a liana call catches those. `liana.ms.filter_view_markers` warns with `UserWarning` rather than bare `Warning`, so the warning can be filtered by category.
+
+- **Spatial proximity weighting now reaches the p-values of the permutation-based methods.** `spatial_key` weighted both the observed score and the permuted null by the same per-interaction factor, which cancels out of `perm * w >= obs * w` -- so on toy data 92.5% of CellPhoneDB p-values were bit-identical with and without weighting, and the rest only moved because a zero weight forced them to 1. Only the observed statistic is weighted now, so a spatially distant pair needs a correspondingly stronger expression signal to clear the null. Affects `li.mt.cellphonedb`, `li.mt.cellchat` and `li.mt.geometric_mean` when `spatial_key` is passed; magnitudes are unchanged.
+
 - **`rank_aggregate`'s `magnitude_rank` now ranks each score column once.** Connectome and NATMI share `expr_prod` as their magnitude score, and the consensus previously ranked it once per method, so the second pass ranked the ranks and reversed its contribution. `magnitude_rank` now agrees with the individual magnitude scores it aggregates; `specificity_rank` and all per-method scores are unchanged.
+- **`rank_aggregate(n_perms=None)` now returns `specificity_rank`.** Skipping the permutations used to drop the consensus to `Magnitude` only, so the column was missing altogether. Specificity is now aggregated over the scores that need no permutations -- with the default methods, Connectome's `scaled_weight`, log2FC's `lr_logfc` and NATMI's `spec_weight` -- while a permutation p-value (`cellphone_pvals`) is left out for that run only. `magnitude_rank` is unchanged. A consensus that ends up with a single specificity score warns under `verbose=True`.
 - `li.rs.get_metalinks(source="...")` filtered per character of the string; it now filters on the whole value (#255).
 - `return_all_lrs=True` works under pandas 3 (chained `fillna(inplace=True)` was a no-op under Copy-on-Write); the `pandas<3` pin from #244 is lifted.
 
 ### Packaging
 
+- **`requests` dropped from `[extras]`.** Nothing imports it since the downloads moved to `pooch`, which brings it along in any case.
+
 - **`mudata>=0.4` required.** With anndata ≥ 0.13, `mudata<0.4` fails on `write_h5mu` (`AttributeError: 'NoneType' object has no attribute 'startswith'`, the `None` layer key that anndata now exposes), which also affected saving `MistyData` objects. `muon>=0.1.9` is required alongside it, older muon cannot import with `mudata>=0.4`.
-- **Version derived from git tags** via [hatch-vcs](https://github.com/ofek/hatch-vcs), as in scanpy and pertpy. `bumpversion` and `.bumpversion.cfg` are gone; `liana.__version__` is removed, use `importlib.metadata.version("liana")`. Releases are made by publishing a `vX.Y.Z` tag on GitHub.
+- **Version derived from git tags** via [hatch-vcs](https://github.com/ofek/hatch-vcs), as in scanpy and pertpy. `bumpversion` and `.bumpversion.cfg` are gone; `liana.__version__` now reads the installed metadata via `importlib.metadata.version("liana")`. Releases are made by publishing a `vX.Y.Z` tag on GitHub.
 - **Requires Python ≥ 3.12, anndata ≥ 0.13, scanpy ≥ 1.12** (#255). scanpy < 1.12 cannot import liana's PEP 695 type aliases.
 
-- **Tutorial CI dependency recipes.** `docs/notebooks` are now runnable from declared extras rather than ad-hoc `pip install` lines, with a committed `uv.lock` for reproducibility. Two install targets cover all 14 notebooks: `uv sync --extra tutorials` (12 CPU notebooks) and `uv sync --extra tutorials-gpu` (the two heavy ones, `inflow_mofaflex` + `liana_c2c`). `tutorials` layers `liana[extras]` with the notebook-only viz/runtime packages (`matplotlib`, `seaborn`, `adjustText`, `marsilea`, `pycrosstalker`); `tutorials-gpu` adds `tensorly`, `mofaflex` and `torch`. Naming follows pertpy/scvi-tools conventions.
+- **Tutorial CI dependency recipes.** The tutorial notebooks (`docs/tutorials/notebooks`, see Documentation) are now runnable from declared extras rather than ad-hoc `pip install` lines, with a committed `uv.lock` for reproducibility. Two install targets cover all 14 notebooks: `uv sync --extra tutorials` (12 CPU notebooks) and `uv sync --extra tutorials-gpu` (the two heavy ones, `inflow_mofaflex` + `liana_c2c`). `tutorials` layers `liana[extras]` with the notebook-only viz/runtime packages (`matplotlib`, `seaborn`, `adjustText`, `marsilea`, `pycrosstalker`); `tutorials-gpu` adds `tensorly`, `mofaflex` and `torch`. Naming follows pertpy/scvi-tools conventions.
 - **`squidpy` added to `[extras]`** — it backs `li.mt.MistyData` and `li.pp.spatial_neighbors` (lazy-imported) and was the one optional-feature dependency the extra never declared.
 - **`torch` is routed to the CPU wheel index** via `[tool.uv.sources]`, keeping tutorial CI off the ~2.5 GB CUDA build; swap the index url for cu124 when GPU CI lands. **`mofaflex` is pinned to git `@main`** there — `inflow_mofaflex.ipynb` needs the unreleased 0.2.0 terms/priors API, which PyPI 0.1.2 does not provide; the override is uv-only, so published metadata stays PyPI-clean.
 
@@ -172,12 +220,12 @@
 ## 1.6.0 (09.07.2025)
 
 - Adapted and bumped requirements to decopler-py \>=2.0.0 \| PR #178 by
-  \@robinfallegger addresses [#179](https://github.com/scverse/liana-py/issues/179)
-- Removed upper Python version requirement [#172](https://github.com/scverse/liana-py/issues/172) [#170](https://github.com/scverse/liana-py/issues/170)
-- Minor adjustment to SpatialDM Global Moran\'s R description [#176](https://github.com/scverse/liana-py/issues/176)
-- Fix feature name warning logic [#169](https://github.com/scverse/liana-py/issues/169)
-- Use scverse cookiecutter [#180](https://github.com/scverse/liana-py/issues/180)
-- Address count issue with circle plot [#185](https://github.com/scverse/liana-py/issues/185)
+  \@robinfallegger addresses [#179](https://github.com/scverse/liana/issues/179)
+- Removed upper Python version requirement [#172](https://github.com/scverse/liana/issues/172) [#170](https://github.com/scverse/liana/issues/170)
+- Minor adjustment to SpatialDM Global Moran\'s R description [#176](https://github.com/scverse/liana/issues/176)
+- Fix feature name warning logic [#169](https://github.com/scverse/liana/issues/169)
+- Use scverse cookiecutter [#180](https://github.com/scverse/liana/issues/180)
+- Address count issue with circle plot [#185](https://github.com/scverse/liana/issues/185)
 
 ## 1.5.1 (13.02.2025)
 
@@ -234,7 +282,7 @@ changed the order of filtering.
   kernel, but with a fixed number of neighbours for each spot. This does
   not account for edges, but differences are minimal does not require
   squidpy as a dependency. One can easily replace it on demand. (#
-  <https://github.com/scverse/liana-py/issues/112>)
+  <https://github.com/scverse/liana/issues/112>)
 - Fixed Python version range between 3.8 and 3.12 (Merged #112)
 - Improved the Differential Expression Vignette be more explicit about
   the causal subnetwork search results (related to #66)

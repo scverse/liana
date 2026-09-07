@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 from fast_array_utils.conv import to_dense
+from fast_array_utils.types import CSBase
 from mudata import MuData
 from numpy.typing import NDArray
 from sklearn.linear_model import LinearRegression, RidgeCV
@@ -74,7 +75,6 @@ class MistyData(MuData):
     :func:`liana.mt.lrMistyData` build the views for the two most common
     designs. Call the object to fit the model -- see
     :func:`liana.mt.MistyData.__call__`.
-
     """
 
     def __init__(
@@ -115,8 +115,8 @@ class MistyData(MuData):
         return view
 
     def _check_views(self) -> None:
-        assert isinstance(self, MuData), "views must be a MuData object"
-        assert "intra" in self.view_names, "views must contain an intra view"
+        if "intra" not in self.view_names:
+            raise ValueError("views must contain an intra view")
 
         for view in self.view_names:
             if view == "intra":
@@ -142,8 +142,9 @@ class MistyData(MuData):
             connectivities = view.obsp[f"{self.spatial_key}_connectivities"]
             view.layers["weighted"] = _to_matrix(connectivities @ X, what="weighted layer")
         else:
-            weights = _to_matrix(view.obsm[f"{self.spatial_key}_connectivities"], what="obsm connectivities").T
-            view.varm["weighted"] = _to_matrix(weights @ X, what="weighted varm").T
+            weights = _to_matrix(view.obsm[f"{self.spatial_key}_connectivities"], what="spatial connectivities").T
+            weighted = (weights @ X).T
+            view.varm["weighted"] = weighted.tocsr() if isinstance(weighted, CSBase) else np.asarray(weighted)
 
     def get_weighted_matrix(self, view_name: str, predictors: list[str] | None = None) -> MatrixLike:
         """
@@ -159,7 +160,6 @@ class MistyData(MuData):
         Returns
         -------
         Weighted matrix of the requested view and predictors. If no predictors are provided, returns the variable names.
-
         """
         view = self._view(view_name)
         selected = view.var_names if predictors is None else predictors
@@ -233,7 +233,6 @@ class MistyData(MuData):
         >>> adata = adata[:, adata.var_names[:5]].copy()
         >>> misty = li.mt.genericMistyData(intra=adata, bandwidth=200, set_diag=True)
         >>> misty(model=li.mt.sp.LinearModel)
-
         """
         fitted_model = model(seed, **kwargs)
         view_str = list(self.view_names)

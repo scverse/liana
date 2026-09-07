@@ -54,10 +54,11 @@ def connectivity(
     >>> import liana as li
     >>> adata = li.ds.generate_toy_spatial()
     >>> p = li.pl.connectivity(adata, idx=0)
-
     """
-    assert connectivity_key in list(adata.obsp.keys())
-    assert spatial_key in adata.obsm_keys()
+    if connectivity_key not in adata.obsp:
+        raise KeyError(f"`adata.obsp['{connectivity_key}']` not found; run `liana.pp.spatial_neighbors` first.")
+    if spatial_key not in adata.obsm:
+        raise KeyError(f"`adata.obsm['{spatial_key}']` not found; is the data spatial?")
 
     _logg(
         "This function will be deprecated in the next version. "

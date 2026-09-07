@@ -47,7 +47,7 @@ def _kernel_function(
 ) -> NDArray[np.floating]:
     families = ["gaussian", "exponential", "linear", "misty_rbf"]
     if kernel not in families:
-        raise AssertionError(f"{kernel} must be a member of {families}")
+        raise ValueError(f"`kernel` must be one of {families}, got {kernel!r}.")
 
     if kernel == "gaussian":
         return _gaussian(distance_mtx, bandwidth)
@@ -147,13 +147,12 @@ def spatial_neighbors(
     `bandwidth` is required and sets the distance over which proximity decays --
     :func:`liana.pp.query_bandwidth` helps pick it -- while `kernel` sets the shape
     of that decay.
-
     """
     if cutoff is None:
         raise ValueError("`cutoff` must be provided!")
     families = ["gaussian", "exponential", "linear", "misty_rbf"]
     if kernel not in families:
-        raise AssertionError(f"{kernel} must be a member of {families}")
+        raise ValueError(f"`kernel` must be one of {families}, got {kernel!r}.")
     if bandwidth is None:
         raise ValueError("Please specify a bandwidth")
 
@@ -186,7 +185,8 @@ def spatial_neighbors(
 
     spot_n = dist.shape[0]
     if reference is None:
-        assert spot_n == adata.shape[0]
+        if spot_n != adata.shape[0]:
+            raise RuntimeError(f"built {spot_n} rows of connectivities for {adata.shape[0]} observations.")
     if spot_n > 1000:
         dist = dist.astype(np.float32)
 
@@ -271,7 +271,6 @@ def spatial_pair_proximity(
     0  CD14+ Monocyte  CD14+ Monocyte      0.663
     1  CD14+ Monocyte         CD19+ B      0.628
     2  CD14+ Monocyte           CD34+      0.020
-
     """
     # groupby_labels use categories if categorical
     groupby_labels = np.asarray(get_obs(adata)[groupby])

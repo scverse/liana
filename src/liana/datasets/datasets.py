@@ -56,7 +56,7 @@ def kang_2018() -> AnnData:
         "Dendritic cells": "DCs",
         "Megakaryocytes": "Mega",
     }
-    obs["cell_abbr"] = obs["cell_type"].replace(abbreviations)
+    obs["cell_abbr"] = obs["cell_type"].astype(str).replace(abbreviations).astype("category")
 
     return adata
 

@@ -51,7 +51,7 @@ def test_select_resource_name() -> None:
 
 
 def test_consensus_pecam1_cd38_direction() -> None:
-    # https://github.com/scverse/liana-py/issues/218
+    # https://github.com/scverse/liana/issues/218
     # The PECAM1-CD38 interaction is directed PECAM1 (ligand) -> CD38 (receptor),
     # as in CellPhoneDB and the literature (PMID: 7542249). The consensus row was
     # flipped (CD38 -> PECAM1); assert the corrected direction is the only one.
@@ -61,7 +61,7 @@ def test_consensus_pecam1_cd38_direction() -> None:
 
 
 def test_consensus_excludes_smad3_receptor() -> None:
-    # https://github.com/scverse/liana-py/issues/218
+    # https://github.com/scverse/liana/issues/218
     # SMAD3 is an intracellular transcription factor, not a membrane receptor,
     # so it must not appear as a receptor in the consensus resource.
     resource = select_resource("consensus")

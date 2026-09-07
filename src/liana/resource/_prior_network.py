@@ -59,7 +59,6 @@ def build_prior_network(
 
     The network is pruned to what lies on a path from an input to an output. Hand
     the result to :func:`liana.mt.find_causalnet`.
-
     """
     _check_if_installed("corneto")  # raises a helpful ImportError if the extra is missing
     from corneto import Graph

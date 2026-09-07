@@ -37,7 +37,6 @@ def _join_stats(
     Returns
     -------
     Ligand-Receptor stats
-
     """
     source_stats = dedict[source].copy()
     source_stats.columns = source_stats.columns.map(lambda x: "ligand_" + str(x))
@@ -60,7 +59,7 @@ def _get_props(X_mask: csr_matrix) -> NDArray[np.floating]:
 def _get_groupby_subset(groupby_pairs: pd.DataFrame | None) -> NDArray[np.object_] | None:
     if groupby_pairs is not V.groupby_pairs:
         if not (P.source in groupby_pairs.columns) | (P.target in groupby_pairs.columns):
-            raise AssertionError(f"{P.source} and {P.target} must be in groupby_pairs")
+            raise ValueError(f"`{P.source}` and `{P.target}` must be in `groupby_pairs`.")
         groupby_subset = union1d(groupby_pairs[P.source].unique(), groupby_pairs[P.target].unique())
 
     else:

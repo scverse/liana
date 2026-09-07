@@ -46,7 +46,6 @@ def zi_minmax(X: MatrixLike, cutoff: float = 0.5) -> csr_matrix:
     array([[0.   , 0.   ],
            [0.352, 0.544],
            [1.   , 1.   ]])
-
     """
     copied = X.copy()
     mat = copied if isspmatrix_csr(copied) else csr_matrix(copied)
@@ -90,7 +89,6 @@ def neg_to_zero(X: MatrixLike, cutoff: float = 0) -> csr_matrix:
 
     >>> li.pp.neg_to_zero(x, cutoff=0.5).toarray()
     array([[0., 0., 0., 0., 2.]])
-
     """
     copied = X.copy()
     mat = copied if isspmatrix_csr(copied) else csr_matrix(copied)

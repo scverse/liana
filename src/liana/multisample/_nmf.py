@@ -71,7 +71,6 @@ def nmf(
 
     Read the factors out with :func:`liana.ms.get_factor_scores` and
     :func:`liana.ms.get_variable_loadings`.
-
     """
     X: MatrixLike
     if adata is not None:
@@ -146,7 +145,6 @@ def estimate_elbow(
     If no knee can be located within `k_range`, `rank` comes back as `None` --
     widen the range. A `k_range` that starts above the true rank returns its own
     lowest value.
-
     """
     kn = _check_if_installed("kneed")
     error_values = [_calculate_error(X, k, **kwargs) for k in tqdm(k_range, disable=not verbose)]

@@ -138,7 +138,6 @@ class GlobalFunction:
         ------
         ValueError
             If the given function is not supported
-
         """
         norm_weight: Weight
         x_dense: np.ndarray

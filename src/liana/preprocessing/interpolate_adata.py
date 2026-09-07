@@ -57,7 +57,6 @@ def interpolate_adata(
     >>> target = li.ds.generate_toy_spatial()
     >>> reference = target[::2].copy()
     >>> interpolated = li.pp.interpolate_adata(target=target, reference=reference, spatial_key="spatial")
-
     """
     target_coords = target.obsm[spatial_key]
     reference_coords = reference.obsm[spatial_key]

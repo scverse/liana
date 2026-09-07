@@ -134,7 +134,7 @@ def test_misty_mask(adata: AnnData) -> None:
 
 
 def test_misty_uns_preserved_on_reconstruction(adata: AnnData) -> None:
-    # https://github.com/scverse/liana-py/issues/242
+    # https://github.com/scverse/liana/issues/242
     # reconstructing a MistyData from an existing (Misty/Mu)Data must not drop `uns`
     misty = genericMistyData(adata, bandwidth=10, set_diag=False, cutoff=0)
     misty(model=LinearModel)

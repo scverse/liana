@@ -215,11 +215,11 @@ Passed as `model=` when calling a `MistyData` object:
     elbow
     circle_plot
     connectivity
-    target_metrics
-    contributions
-    interactions
-    annulus_plot
+    misty_target_metrics
+    misty_contributions
+    misty_interactions
+    annulus
     lric_lineplot
-    lric_divergence_plot
+    lric_divergence
     feature_by_group
 ```

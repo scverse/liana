@@ -25,7 +25,6 @@ def generate_toy_spatial() -> AnnData:
     -------
     `pbmc68k_reduced` with random `obsm['spatial']` coordinates and the spatial
     connectivities that :func:`liana.pp.spatial_neighbors` derives from them.
-
     """
     adata = pbmc68k_reduced()
     adata.X = get_raw_x(adata).copy()  # log-norm expression in .X (scverse convention); .raw kept
@@ -53,7 +52,6 @@ def generate_toy_mdata() -> MuData:
     A MuData object with two views, `'adata_x'` and `'adata_y'`, each with a
     `'scaled'` layer, and with `.obsm['spatial']`,
     `.obsp['spatial_connectivities']`, `.obs` and `.uns` shared at the top level.
-
     """
     import scanpy as sc
     from mudata import MuData
@@ -87,7 +85,6 @@ def generate_toy_adata() -> AnnData:
     -------
     `pbmc68k_reduced` with a randomly-assigned (seeded) `obs['sample']` of four
     samples, and an `obs['case']` splitting those samples into two conditions.
-
     """
     adata = pbmc68k_reduced()
     adata.X = get_raw_x(adata).copy()  # log-norm expression in .X (scverse convention); .raw kept

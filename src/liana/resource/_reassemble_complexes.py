@@ -37,7 +37,6 @@ def _filter_reassemble_complexes(
     Return
     -----------
     lr_res: a reduced long-format pandas dataframe
-
     """
     # Filter by expr_prop (inner join only complexes where all subunits are expressed)
     expressed = (
@@ -134,7 +133,6 @@ def _explode_complexes(resource: pd.DataFrame, SOURCE: str = "ligand", TARGET: s
     Returns
     -------
     A resource with exploded complexes
-
     """
     resource["interaction"] = resource[SOURCE] + "&" + resource[TARGET]
     resource = (

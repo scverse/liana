@@ -43,7 +43,6 @@ class SpatialBivariate:
     ----------
     %(x_name)s
     %(y_name)s
-
     """
 
     @d.dedent
@@ -159,7 +158,6 @@ class SpatialBivariate:
         ``li.mt.bivariate.show_functions()`` lists the available `local_name` choices.
         Pass a `MuData` with `x_mod`/`y_mod` instead of an `AnnData` to relate two
         modalities.
-
         """
         if n_perms is not None and n_perms < 0:
             raise ValueError("n_perms must be None, 0 for analytical or > 0 for permutation")
@@ -320,7 +318,6 @@ class SpatialBivariate:
         Returns
         -------
         Table of the bivariate methods and their description.
-
         """
         funs = {
             function.name: {

@@ -4,8 +4,6 @@ from importlib.metadata import version
 from scanpy._utils import annotate_doc_types
 
 from liana import datasets as ds
-
-# method first: it initializes shared state other packages import during load
 from liana import method as mt
 from liana import multisample as ms
 from liana import plotting as pl

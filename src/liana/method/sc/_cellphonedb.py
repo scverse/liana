@@ -31,13 +31,12 @@ def _cpdb_score(
     Returns
     -------
     A tuple with lr_mean and p-value for x
-
     """
     zero_msk = (x["ligand_means"] == 0) | (x["receptor_means"] == 0)
     lr_means = _mean((x["ligand_means"].to_numpy(), x["receptor_means"].to_numpy()))
     lr_means[zero_msk] = 0
-    lr_means, proximity_weights = _apply_proximity_weights(lr_means, x)
-    cpdb_pvals = _calculate_pvals(lr_means, perm_stats, _mean, proximity_weights)
+    lr_means = _apply_proximity_weights(lr_means, x)
+    cpdb_pvals = _calculate_pvals(lr_means, perm_stats, _mean)
 
     return lr_means, cpdb_pvals
 

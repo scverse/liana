@@ -77,6 +77,7 @@ class CommonColumns:
     receptor_props: Final = "receptor_props"
     ligand_pvals: Final = "ligand_pvals"
     receptor_pvals: Final = "receptor_pvals"
+    proximity: Final = "proximity"
 
 
 class MethodColumns:

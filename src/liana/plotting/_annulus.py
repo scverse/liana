@@ -2,6 +2,7 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 from anndata import AnnData
+from matplotlib.figure import Figure
 from matplotlib.patches import Annulus
 
 from liana._core._constants import DefaultValues as V
@@ -11,7 +12,7 @@ from liana._core._types import get_coordinates
 
 
 @d.dedent
-def annulus_plot(
+def annulus(
     adata: AnnData,
     spatial_key: str = K.spatial_key,
     radius_step: float = 20.0,
@@ -20,7 +21,8 @@ def annulus_plot(
     n_rings: int = 10,
     seed: int = V.seed,
     figure_size: tuple[float, float] = (6, 6),
-) -> None:
+    return_fig: bool = V.return_fig,
+) -> Figure | None:
     """
     Visualise concentric annuli around a randomly chosen cell on a tissue section.
 
@@ -45,6 +47,11 @@ def annulus_plot(
         Number of concentric rings to draw.
     %(seed)s
     %(figure_size)s
+    %(return_fig)s
+
+    Returns
+    -------
+    The resulting figure, unless ``return_fig`` is `False`.
 
     Raises
     ------
@@ -60,8 +67,7 @@ def annulus_plot(
 
     >>> import liana as li
     >>> adata = li.ds.generate_toy_spatial()
-    >>> li.pl.annulus_plot(adata, radius_step=200, n_rings=4)
-
+    >>> fig = li.pl.annulus(adata, radius_step=200, n_rings=4)
     """
     if spatial_key not in adata.obsm:
         raise KeyError(f"'{spatial_key}' not found in adata.obsm.")
@@ -147,5 +153,6 @@ def annulus_plot(
         ncol=2,
     )
 
-    plt.tight_layout()
-    plt.show()
+    fig.tight_layout()
+
+    return fig if return_fig else None

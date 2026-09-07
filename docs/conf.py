@@ -24,7 +24,7 @@ sys.path.insert(0, str(HERE / "extensions"))
 info = metadata("liana")
 project_name = info["Name"]
 author = info["Author"]
-copyright = f"{datetime.now():%Y}, {author}."
+copyright = f"{datetime.now():%Y}, the LIANA+ developers"
 version = info["Version"]
 urls = dict(pu.split(", ") for pu in info.get_all("Project-URL"))
 repository_url = urls["Source"]
@@ -43,7 +43,7 @@ needs_sphinx = "4.0"
 html_context = {
     "display_github": True,  # Integrate GitHub
     "github_user": "scverse",
-    "github_repo": "liana-py",
+    "github_repo": "liana",
     "github_version": "main",
     "conf_py_path": "/docs/",
 }
@@ -63,10 +63,10 @@ extensions = [
     "sphinxcontrib.bibtex",
     "sphinxcontrib.katex",
     "sphinx_autodoc_typehints",
-    "scanpydoc.elegant_typehints",
     "sphinx_design",
     "IPython.sphinxext.ipython_console_highlighting",
     "sphinxext.opengraph",
+    "scanpydoc",  # theme + elegant type hints; needs to be before linkcode
     *[p.stem for p in (HERE / "extensions").glob("*.py")],
 ]
 
@@ -139,7 +139,7 @@ exclude_patterns = [
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "sphinx_book_theme"
+html_theme = "scanpydoc"
 html_static_path = ["_static"]
 html_css_files = ["css/custom.css"]
 
@@ -150,9 +150,15 @@ html_favicon = "_static/logo.png"
 
 html_theme_options = {
     "repository_url": repository_url,
+    "repository_branch": "main",
     "use_repository_button": True,
+    "use_issues_button": True,
     "path_to_docs": "docs/",
     "navigation_with_keys": False,
+    # The crimson of the logo. scanpydoc exposes it as the `--accent-color` CSS variable, which colors the mobile header and the project name.
+    "accent_color": "#ba1b57",
+    "show_toc_level": 2,
+    "footer_content_items": ["copyright.html"],
 }
 
 pygments_style = "default"

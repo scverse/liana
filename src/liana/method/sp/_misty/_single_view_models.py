@@ -41,7 +41,6 @@ class SingleViewModel:
         Contains the resulting predictions in array form.
     importances : dict[str, float]
         Contains the importance scores of the different predictors.
-
     """
 
     def __init__(self, seed: int, **kwargs: Any) -> None:
@@ -94,7 +93,6 @@ class SingleViewModel:
         Returns
         -------
         Matrix with the prediction results for each round of CV
-
         """
         predictions = np.zeros_like(y)
         kf = KFold(n_splits=k_cv, random_state=self.seed, shuffle=True)
@@ -124,7 +122,6 @@ class RandomForestModel(SingleViewModel):
             List of feature names
         k_cv
             Not used
-
         """
         forest = RandomForestRegressor(oob_score=True, random_state=self.seed, **self.kwargs)
         forest.fit(X, y)
@@ -150,7 +147,6 @@ class LinearModel(SingleViewModel):
             List of feature names
         k_cv
             Number of cross-validation folds. If None, no cross-validation is performed.
-
         """
         # NOTE: read, don't pop -- `fit` is called once per target on the same
         # instance, so popping would apply `n_jobs` to the first target only.
@@ -188,7 +184,6 @@ class RobustLinearModel(SingleViewModel):
             List of feature names
         k_cv
             Number of cross-validation folds. If None, no cross-validation is performed.
-
         """
         if k_cv is None:
             raise ValueError("`k_cv` must be provided for the robust linear model.")

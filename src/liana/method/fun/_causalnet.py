@@ -99,7 +99,6 @@ def find_causalnet(
     >>> df, problem = li.mt.find_causalnet(
     ...     prior, input_node_scores={"CD4": 1.0}, output_node_scores={"JUN": 1.0, "FOS": -1.0}, verbose=False
     ... )
-
     """
     cn = _check_if_installed("corneto")
 

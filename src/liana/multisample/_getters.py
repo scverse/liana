@@ -47,7 +47,6 @@ def get_factor_scores(
 
     `scores` has one `Factor{i}` column per factor, an `index` column of the original
     barcodes, and any `.obs` columns named in `obs_keys`.
-
     """
     if obsm_key is None or obsm_key not in adata.obsm.keys():
         raise ValueError(f"{obsm_key} not found in `.obsm`")
@@ -139,7 +138,6 @@ def get_variable_loadings(
     Views built by :func:`liana.ms.lrs_to_views` name their variables
     `'source&target:ligand^receptor'`, which `view_sep=':'`, `variable_sep='^'` and
     `pair_sep='&'` split in the same way.
-
     """
     if var_names is None:
         var_names = ["ligand_complex", "receptor_complex"]

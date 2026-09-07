@@ -98,7 +98,6 @@ def df_to_lr(
     Each statistic named in `stat_keys` is carried over to both sides of every
     interaction -- as `ligand_stat` and `receptor_stat` -- and averaged into an
     `interaction_stat` column.
-
     """
     _check_groupby(adata=adata, groupby=groupby, verbose=verbose)
     if (groupby not in adata.obs.columns) or (groupby not in dea_df.columns):
@@ -106,7 +105,7 @@ def df_to_lr(
     if not np.any(adata.var_names.isin(dea_df.index)):
         raise ValueError("index of dea_df must match adata.var_names")
     if len(np.intersect1d(adata.obs[groupby].unique(), dea_df[groupby].unique())) == 0:
-        raise AssertionError("`groupby` intersect between `dea_df` and `adata` is 0. Please check `groupby`.")
+        raise ValueError("`groupby` intersect between `dea_df` and `adata` is 0. Please check `groupby`.")
 
     resource = _handle_resource(
         interactions=interactions, resource=resource, resource_name=resource_name, verbose=verbose

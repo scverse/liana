@@ -75,7 +75,6 @@ def generate_lr_geneset(
 
     The result can then be handed to an enrichment method
     (e.g. `decoupler`) with the interaction names as features.
-
     """
     # TODO: Fix this if else, it's not very elegant
     if weight is None:

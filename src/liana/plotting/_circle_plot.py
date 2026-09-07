@@ -113,7 +113,6 @@ def get_mask_df(
     Returns
     -------
     The resulting masked table
-
     """
     if source_cell_type is None and target_cell_type is None:
         return pivot_table
@@ -138,7 +137,7 @@ def get_mask_df(
 
 
 @d.dedent
-def circle_plot(
+def circle(
     adata: sc.AnnData,
     uns_key: str = K.uns_key,
     liana_res: pd.DataFrame | None = None,
@@ -237,11 +236,10 @@ def circle_plot(
     >>> import liana as li
     >>> adata = li.ds.generate_toy_adata()
     >>> li.mt.rank_aggregate(adata, groupby="bulk_labels", n_perms=None)
-    >>> ax = li.pl.circle_plot(adata, groupby="bulk_labels")
+    >>> ax = li.pl.circle(adata, groupby="bulk_labels")
 
     With `pivot_mode='mean'` and a `score_key` the edges are weighted by that
     score's mean instead of by the number of interactions.
-
     """
     if groupby is None:
         raise ValueError("`groupby` must be provided!")

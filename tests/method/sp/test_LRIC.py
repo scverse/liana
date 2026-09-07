@@ -16,7 +16,6 @@ from liana.datasets import generate_toy_spatial
 from liana.datasets._sample_resource import sample_resource
 from liana.method.sp._LRIC import (
     _default_min_cells,
-    _edge_group_bounds,
     _index_resource,
     _linear_transform,
     _make_radii,
@@ -231,12 +230,6 @@ def test_support_edge_list() -> None:
     bin_of = dict(zip(zip(I.tolist(), J.tolist(), strict=True), bin_idx.tolist(), strict=True))
     assert bin_of[(0, 1)] == 0 and bin_of[(1, 2)] == 0
     assert bin_of[(0, 2)] == 1
-
-
-def test_edge_group_bounds() -> None:
-    group_key_sorted = np.array([0, 0, 1, 1, 1, 3])
-    bounds = _edge_group_bounds(group_key_sorted, n_groups=4)
-    np.testing.assert_array_equal(bounds, [0, 2, 5, 5, 6])
 
 
 def test_type_mean_weights() -> None:
@@ -765,3 +758,12 @@ def test_lric_no_lr_pairs_raises(adata: AnnData) -> None:
         lric(adata, resource=bad, inplace=False, verbose=False)
     with raises(ValueError, match="Please check if appropriate organism/ID type"):
         lric(adata, resource=bad, groupby="cell_type", inplace=False, verbose=False)
+
+
+def test_pair_chunk_is_deprecated(adata: AnnData, resource: pd.DataFrame) -> None:
+    expected = as_frame(lric(adata, resource=resource, inplace=False, **_KWARGS))
+
+    with pytest.warns(FutureWarning, match="argument pair_chunk is deprecated"):
+        got = as_frame(lric(adata, resource=resource, inplace=False, pair_chunk=8, **_KWARGS))
+
+    pd.testing.assert_frame_equal(got, expected)

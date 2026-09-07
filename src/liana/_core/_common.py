@@ -28,7 +28,6 @@ def _logg(message: str, level: str | None = "info", verbose: bool = False) -> No
         are 'warn' or 'info', any other value will result in no logging.
     verbose
         Controls whether the message is logged or not.
-
     """
     if verbose:
         if level == "warn":
@@ -56,7 +55,6 @@ def _check_if_installed(package_name: str, custom_error_message: str | None = No
     ------
     ImportError
         If the package could not be found/imported.
-
     """
     try:
         imported_module = __import__(package_name)
@@ -77,7 +75,8 @@ def _get_liana_res(
     uns_key: str = K.uns_key,
 ) -> DataFrame:
     if adata is not None:
-        assert uns_key in adata.uns.keys()
+        if uns_key not in adata.uns:
+            raise KeyError(f"`{uns_key}` not found in `adata.uns`.")
         _logg(f"Using `adata.uns['{uns_key}']`")
         res = adata.uns[uns_key]
         if not isinstance(res, DataFrame):

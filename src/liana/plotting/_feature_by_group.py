@@ -75,7 +75,6 @@ def feature_by_group(
     >>> fig, ax = li.pl.feature_by_group(
     ...     lrdata, groupby="bulk_labels", labels=["Dendritic", "CD14+ Monocyte"], feature=lrdata.var_names[0]
     ... )
-
     """
     # Validate inputs
     if adata is None:

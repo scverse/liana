@@ -8,7 +8,7 @@ from tests._helpers import get_obs, not_none, plot_data
 from liana.datasets import generate_toy_spatial
 from liana.datasets._sample_resource import sample_resource
 from liana.method.sp._LRIC import cross_pcf, lric
-from liana.plotting import lric_divergence_plot, lric_lineplot
+from liana.plotting import lric_divergence, lric_lineplot
 
 
 class _RadiusKwargs(TypedDict):
@@ -83,7 +83,7 @@ def test_max_dist_restricts_the_plotted_radii(adata: AnnData) -> None:
 def test_divergence_plot(adata: AnnData) -> None:
     two = adata.uns["cross_pcf"]["interaction"].unique()[:2]
     p = not_none(
-        lric_divergence_plot(
+        lric_divergence(
             adata,
             "cross_pcf",
             feature_a={"interaction": two[0]},
@@ -96,7 +96,7 @@ def test_divergence_plot(adata: AnnData) -> None:
     # both curves are drawn
     assert plot_data(p)["curve"].nunique() == 2
     # `liana_res=` is accepted in place of an AnnData
-    lric_divergence_plot(
+    lric_divergence(
         liana_res=adata.uns["cross_pcf"],
         feature_a={"interaction": two[0]},
         feature_b={"interaction": two[1]},
@@ -107,7 +107,7 @@ def test_divergence_plot(adata: AnnData) -> None:
 
 def test_divergence_plot_bad_selection_raises(adata: AnnData) -> None:
     with pytest.raises(ValueError, match="No rows match"):
-        lric_divergence_plot(
+        lric_divergence(
             adata,
             "cross_pcf",
             feature_a={"interaction": "nope^nope"},

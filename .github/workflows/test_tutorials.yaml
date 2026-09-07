@@ -1,0 +1,87 @@
+name: Test tutorials
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tutorials:
+    strategy:
+      fail-fast: false
+      matrix:
+        notebook:
+          - basic_usage.ipynb
+          - prior_knowledge.ipynb
+          - targeted.ipynb
+          # pycrosstalker >=2 pins `anndata<0.13` and `pandas==2.2.2`, which liana cannot satisfy, and the 1.0.1 that resolves instead no longer ships the `from_liana` reader the notebook calls.
+          # - liana_pyCrossTalkeR.ipynb
+          - mofatalk.ipynb
+          - mofacellular.ipynb
+          - liana_c2c.ipynb
+          - bivariate.ipynb
+          - misty.ipynb
+          - sc_multi.ipynb
+          - sma.ipynb
+          # The three notebooks below run on the ~1GB, ~4M cell MERFISH atlas (`li.ds.yao_2023`), which does not fit a standard runner within a sensible time budget.
+          # Re-enable them once they start from a subsampled slide.
+          # - inflow_score.ipynb
+          # - inflow_mofaflex.ipynb
+          # - LRIC_tutorial.ipynb
+
+    name: ${{ matrix.notebook }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MPLBACKEND: agg
+      DATASET_DIR: docs/tutorials/notebooks/data
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          fetch-depth: 0
+          submodules: true
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+      - name: Cache the downloaded datasets
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.DATASET_DIR }}
+          key: ${{ runner.os }}-liana-datasets-${{ hashFiles('src/liana/datasets/registry.yaml') }}
+          restore-keys: ${{ runner.os }}-liana-datasets-
+      - name: Install graphviz
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y graphviz
+      - name: Install the tutorial dependencies
+        run: uv sync --extra tutorials-gpu
+      - name: List all installed package versions
+        run: uv pip list
+      - name: Execute ${{ matrix.notebook }}
+        run: |
+          uv run --with nbconvert --with ipykernel \
+            jupyter nbconvert --to notebook --execute \
+            --ExecutePreprocessor.timeout=1200 \
+            --output-dir "${RUNNER_TEMP}/executed" \
+            "docs/tutorials/notebooks/${{ matrix.notebook }}"
+
+  check:
+    name: All tutorials run
+    if: always()
+    needs: tutorials
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}

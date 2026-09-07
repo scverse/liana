@@ -40,7 +40,6 @@ def select_resource(resource_name: str = V.resource_name) -> DataFrame:
     2  LGALS9     CD44
 
     Pass the frame to any method via `resource=`.
-
     """
     resource_name = resource_name.lower()
 
@@ -74,7 +73,6 @@ def show_resources() -> list[str]:
 
     >>> import liana as li
     >>> resources = li.rs.show_resources()
-
     """
     resource_path = pathlib.Path(__file__).parent.joinpath("omni_resource.csv")
     resource = read_csv(resource_path, index_col=False)

@@ -18,7 +18,6 @@ def _sca_score(x: DataFrame) -> tuple[Series, None]:
     LRscore
         The ligand-receptor scores
     None
-
     """
     lr_sqrt = np.sqrt(x["ligand_means"]) * np.sqrt(x["receptor_means"])
     denominator = lr_sqrt + x.mat_mean

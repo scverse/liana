@@ -92,7 +92,6 @@ def dotplot(
     ...     orderby="magnitude_rank",
     ...     orderby_ascending=True,
     ... )
-
     """
     liana_res = _prep_liana_res(
         adata=adata,
@@ -203,7 +202,6 @@ def dotplot_by_sample(
     >>> adata = li.ds.generate_toy_adata()
     >>> li.mt.rank_aggregate.by_sample(adata, sample_key="sample", groupby="bulk_labels", n_perms=None)
     >>> p = li.pl.dotplot_by_sample(adata, colour="lr_means", size="magnitude_rank", ligand_complex="HLA-DRA")
-
     """
     liana_res = _prep_liana_res(
         adata=adata,

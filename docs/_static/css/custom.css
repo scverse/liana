@@ -1,14 +1,139 @@
-/* Reduce the font size in data frames - See https://github.com/scverse/cookiecutter-scverse/issues/193 */
-div.cell_output table.dataframe {
-    font-size: 0.8em;
+/* ============================================================================
+   LIANA+ documentation theme.
+   The palette is taken from the logo: navy #364159, turquoise #00FFEA, crimson #BA1B57 and off-white #F6F0F1.
+   Turquoise and crimson are the brand colors, but neither is readable as text on white at full saturation, so darker "ink" variants carry text and the saturated originals stay decorative.
+   The theme (scanpydoc on top of sphinx-book-theme / pydata-sphinx-theme) is steered through its CSS custom properties.
+   ========================================================================= */
+
+/* -- Brand palette --------------------------------------------------------- */
+:root {
+    --liana-navy: #364159;
+    --liana-navy-soft: #4a587a;
+    --liana-crimson: #ba1b57;
+    --liana-crimson-tint: #fdeef4;
+    --liana-crimson-light: #e0577f;
+    --liana-turquoise: #00ffea;
+    --liana-turquoise-ink: #00786e;
+    --liana-turquoise-light: #2fd9c8;
+    --liana-cream: #f6f0f1;
 }
 
-/* Adjust the logo size */
-.logo img {
-    width: 50%; /* or any percentage you want */
-    height: auto; /* maintain aspect ratio */
+/* -- Light mode ------------------------------------------------------------ */
+html[data-theme="light"] {
+    --pst-color-primary: var(--liana-crimson);
+    --pst-color-primary-highlight: var(--liana-navy);
+    --pst-color-secondary: var(--liana-navy);
+    --pst-color-secondary-highlight: var(--liana-navy-soft);
+    --pst-color-link: var(--liana-crimson);
+    --pst-color-link-hover: var(--liana-turquoise-ink);
+    --pst-color-inline-code: var(--liana-turquoise-ink);
+    --pst-color-accent: var(--liana-turquoise);
+    --pst-color-target: var(--liana-crimson-tint);
+
+    --sd-color-primary: var(--liana-crimson);
+    --sd-color-primary-highlight: var(--liana-navy);
+    --sd-color-shadow: rgb(54 65 89 / 18%);
+}
+
+/* -- Dark mode ------------------------------------------------------------- */
+html[data-theme="dark"] {
+    /* The saturated brand colors only have enough contrast on a dark background. */
+    --pst-color-primary: var(--liana-crimson-light);
+    --pst-color-primary-highlight: var(--liana-cream);
+    --pst-color-secondary: var(--liana-turquoise-light);
+    --pst-color-secondary-highlight: var(--liana-cream);
+    --pst-color-link: var(--liana-crimson-light);
+    --pst-color-link-hover: var(--liana-turquoise-light);
+    --pst-color-inline-code: var(--liana-turquoise-light);
+    --pst-color-accent: var(--liana-turquoise);
+    --pst-color-target: rgb(186 27 87 / 28%);
+
+    --sd-color-primary: var(--liana-crimson-light);
+    --sd-color-primary-highlight: var(--liana-turquoise-light);
+    --sd-color-shadow: rgb(0 0 0 / 50%);
+}
+
+/* -- Logo ------------------------------------------------------------------ */
+/* The logo is a hexagon rather than a wordmark, so it needs the height to stay legible. */
+.bd-sidebar-primary .navbar-brand img,
+.bd-sidebar-primary .navbar-brand .logo__image {
+    max-height: 7rem;
+    width: auto;
+    margin: 0 auto;
+}
+
+.bd-header .navbar-brand img,
+.bd-header .navbar-brand .logo__image {
+    max-height: 2.4rem;
+    width: auto;
+}
+
+/* -- Sidebar section captions ---------------------------------------------- */
+.bd-sidebar-primary .caption-text,
+nav.bd-links p.caption .caption-text {
+    color: var(--pst-color-primary);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.78rem;
+}
+
+/* Keep the deeply nested API entries compact. */
+li.toctree-l3 {
+    font-size: 81.25% !important;
+}
+
+li.toctree-l4 {
+    font-size: 75% !important;
+}
+
+/* -- Landing page cards (sphinx-design) ------------------------------------ */
+.sd-card {
+    border: 1px solid var(--pst-color-border);
+    border-radius: 0.6rem;
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease,
+        border-color 0.18s ease;
+}
+
+.sd-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--pst-color-primary);
+    box-shadow: 0 0.5rem 1.25rem var(--sd-color-shadow);
+}
+
+.sd-card .sd-card-title {
+    color: var(--pst-color-secondary);
+    font-weight: 600;
+}
+
+.sd-card .sd-card-title .sd-octicon {
+    color: var(--pst-color-primary);
+    margin-right: 0.4rem;
+    vertical-align: -0.12em;
+}
+
+.sd-card a.sd-card-title,
+.sd-card a.sd-card-title:hover {
+    text-decoration: none;
+}
+
+/* -- Graphical abstract on the landing page -------------------------------- */
+img.liana-hero {
+    display: block;
+    margin: 1.5rem auto 2rem;
+    max-width: 720px;
+    width: 100%;
+    height: auto;
 }
 
 img.no-scaled-link {
     background: transparent !important;
+}
+
+/* -- Reduce the font size in data frames ----------------------------------- */
+/* See https://github.com/scverse/cookiecutter-scverse/issues/193 */
+div.cell_output table.dataframe {
+    font-size: 0.8em;
 }

@@ -72,7 +72,6 @@ def estimate_metalinks(
     the membrane on their own. The result is the input to
     ``liana.mt.bivariate`` or to any single-cell method, with
     `x_mod='metabolite'` and `y_mod='receptor'`.
-
     """
     dc = _check_if_installed(package_name="decoupler")
     ad = prep_check_adata(

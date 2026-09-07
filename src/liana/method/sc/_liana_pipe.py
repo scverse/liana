@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import reduce
 from typing import TYPE_CHECKING, Literal, TypedDict
 
 import numpy as np
@@ -9,7 +8,6 @@ import pandas as pd
 import scanpy as sc
 from anndata import AnnData
 from mudata import MuData
-from scipy.sparse import csr_matrix
 from scipy.stats import norm
 
 from liana._core._constants import CommonColumns as C
@@ -21,7 +19,7 @@ from liana._core._docs import d
 from liana._core._pipe_utils import assert_covered, filter_resource, prep_check_adata
 from liana._core._pipe_utils._aggregate import _aggregate
 from liana._core._pipe_utils._common import _get_groupby_subset, _get_props, _join_stats
-from liana._core._pipe_utils._get_mean_perms import _AggFn, _get_mat_idx, _get_means_perms
+from liana._core._pipe_utils._get_mean_perms import Aggregation, _get_mat_idx, _get_means_perms, _trimean
 from liana._core._pipe_utils._pre import _choose_mtx_rep
 from liana._core._types import get_obs, get_x
 from liana.multisample.mdata_to_anndata import mdata_to_anndata
@@ -30,10 +28,15 @@ from liana.resource._reassemble_complexes import _explode_complexes, _filter_rea
 from liana.resource.select_resource import _handle_resource
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable
 
     from liana._core._types import MatrixLike
     from liana.method.sc._Method import MethodMeta
+    from liana.method.sc._rank_aggregate import AggregateClass
+
+
+_SUBUNIT_COLS: list[str] = [P.ligand, P.receptor, C.ligand_props, C.receptor_props]
+"""Per-subunit columns every method needs to reassemble complexes."""
 
 
 class MdataKwargs(TypedDict, total=False):
@@ -60,35 +63,27 @@ class SpatialKwargs(TypedDict, total=False):
 
 
 @d.dedent
-def liana_pipe(
+def _prepare_lr_stats(
     adata: AnnData | MuData,
     groupby: str,
     resource_name: str,
     resource: pd.DataFrame | None,
     interactions: list[tuple[str, str]] | None,
     groupby_pairs: pd.DataFrame | None,
-    expr_prop: float,
     min_cells: int,
     base: float,
     de_method: DeMethod,
-    n_perms: int | None,
-    seed: int,
     verbose: bool,
     use_raw: bool,
-    n_jobs: int,
     layer: str | None,
-    supp_columns: list[str] | None = None,
-    return_all_lrs: bool = False,
-    spatial_key: str | None = None,
-    spatial_kwargs: SpatialKwargs | None = None,
-    _score: MethodMeta | None = None,
-    _methods: Sequence[MethodMeta] | None = None,
-    _consensus_opts: list[str] | Literal[False] | None = None,
-    _aggregate_method: Literal["rra", "mean"] = "rra",
-    mdata_kwargs: MdataKwargs | None = None,
-) -> pd.DataFrame | dict[str, pd.DataFrame]:
+    complex_cols: list[str],
+    add_cols: list[str],
+    spatial_key: str | None,
+    spatial_kwargs: SpatialKwargs | None,
+    mdata_kwargs: MdataKwargs,
+) -> tuple[AnnData, pd.DataFrame]:
     """
-    Single-cell Ligand-receptor inference pipeline.
+    Assemble the per-cluster ligand and receptor statistics every method scores from.
 
     Parameters
     ----------
@@ -98,54 +93,25 @@ def liana_pipe(
     %(resource)s
     %(interactions)s
     %(groupby_pairs)s
-    %(expr_prop)s
     %(min_cells)s
     %(base)s
     %(de_method)s
-    %(n_perms_sc)s
-    %(seed)s
     %(verbose)s
     %(use_raw)s
     %(layer)s
-    supp_columns
-        Additional columns to be added to the output of each method.
-    %(return_all_lrs)s
-    _score
-        Instance of Method classes (None by default - returns LR stats - no methods used).
-    _methods
-        Methods to be run (only relevant for consensus).
-    _consensus_opts
-        Ways to aggregate interactions across methods by default does all aggregations (['Specificity', 'Magnitude']).
-    _aggregate_method
-        RobustRankAggregate('rra') or mean rank ('mean').
+    complex_cols
+        Columns relevant for protein complexes.
+    add_cols
+        Additional columns the scoring methods require.
     %(spatial_key)s
     %(spatial_kwargs)s
     %(mdata_kwargs)s
 
     Returns
     -------
-    A DataFrame with ligand-receptor results
-
+    The prepared :class:`~anndata.AnnData` and a DataFrame of one row per ligand-receptor
+    subunit and cluster pair.
     """
-    if mdata_kwargs is None:
-        mdata_kwargs = MdataKwargs()
-
-    _key_cols = P.primary
-
-    if _score is not None:
-        _complex_cols, _add_cols = _score.complex_cols, _score.add_cols
-    else:
-        _complex_cols = [C.ligand_means, C.receptor_means]
-        _add_cols = M.get_all_values()
-
-    if supp_columns is None:
-        supp_columns = []
-    _add_cols = _add_cols + [P.ligand, P.receptor, C.ligand_props, C.receptor_props] + supp_columns
-
-    # initialize mat_mean for sca
-    mat_mean = None
-    mat_max = None
-
     resource = _handle_resource(
         interactions=interactions, resource=resource, resource_name=resource_name, verbose=verbose
     )
@@ -170,12 +136,8 @@ def liana_pipe(
         verbose=verbose,
     )
 
-    if M.mat_mean in _add_cols:
-        mat_mean = np.float32(get_x(adata).mean(dtype="float32"))
-
-    # get mat max for CellChat
-    if M.mat_max in _add_cols:
-        mat_max = np.float32(get_x(adata).max())
+    mat_mean = np.float32(get_x(adata).mean(dtype="float32")) if M.mat_mean in add_cols else None
+    mat_max = np.float32(get_x(adata).max()) if M.mat_max in add_cols else None
 
     # Check overlap between resource and adata
     assert_covered(
@@ -186,7 +148,7 @@ def liana_pipe(
     resource = filter_resource(resource, adata.var_names)
 
     # Cluster stats
-    if (M.ligand_cdf in _add_cols) or (M.receptor_cdf in _add_cols):
+    if (M.ligand_cdf in add_cols) or (M.receptor_cdf in add_cols):
         cluster_stats = _cluster_stats(adata)
 
     # Create Entities
@@ -197,129 +159,309 @@ def liana_pipe(
     if verbose:
         print(f"Generating ligand-receptor stats for {adata.shape[0]} samples and {adata.shape[1]} features")
 
-    # Get lr results
     lr_res = _get_lr(
         adata=adata,
         resource=resource,
         groupby_pairs=groupby_pairs,
         mat_mean=mat_mean,
         mat_max=mat_max,
-        relevant_cols=_key_cols + _add_cols + _complex_cols,
+        relevant_cols=P.primary + add_cols + complex_cols,
         de_method=de_method,
         base=base,
         verbose=verbose,
     )
 
     # Ligand and receptor score based on unfiltered cluster mean and cluster std. Handles protein complexes
-    if (M.ligand_cdf in _add_cols) or (M.receptor_cdf in _add_cols):
+    if (M.ligand_cdf in add_cols) or (M.receptor_cdf in add_cols):
         lr_res = _complex_score(lr_res, cluster_stats)
 
     # Mean Sums required for NATMI (note done on subunits also)
-    if M.ligand_means_sums in _add_cols:
+    if M.ligand_means_sums in add_cols:
         on = [x for x in P.complete if x != P.source]
         lr_res = _sum_means(lr_res, what=C.ligand_means, on=on)
-    if M.receptor_means_sums in _add_cols:
+    if M.receptor_means_sums in add_cols:
         on = [x for x in P.complete if x != P.target]
         lr_res = _sum_means(lr_res, what=C.receptor_means, on=on)
 
-    # Weight by spatial proximity when requested
     if spatial_key is not None:
-        if spatial_key not in adata.obsm:
-            raise KeyError(f"`spatial_key` {spatial_key!r} not found in `adata.obsm`.")
-        if spatial_kwargs is None:
-            spatial_kwargs = SpatialKwargs()
-
-        proximity_df = spatial_pair_proximity(
-            adata=adata, groupby="@label", spatial_key=spatial_key, verbose=verbose, **spatial_kwargs
+        lr_res = _add_proximity(
+            lr_res, adata=adata, spatial_key=spatial_key, spatial_kwargs=spatial_kwargs, verbose=verbose
         )
-        # Set interacting to 0 where not interacting
-        # Note: this sets proximity to 0 for non-interacting pairs (according to the count/interaction
-        # threshold used inside spatial_pair_proximity), so the resulting "proximity" column reflects
-        # both spatial closeness AND interaction/count-based significance rather than pure distance.
-        proximity_df["proximity"] = proximity_df["proximity"] * proximity_df["interacting"]
 
-        lr_res = lr_res.merge(proximity_df[["source", "target", "proximity"]], on=["source", "target"], how="left")
-        lr_res["proximity"] = lr_res["proximity"].fillna(0.0)
+    return adata, lr_res
 
-    # Calculate Score
-    if _score is not None:
-        if _score.method_name == "Rank_Aggregate":
-            # Run all methods in consensus
-            lrs: dict[str, pd.DataFrame] = {}
-            if _methods is None:
-                raise ValueError("`_methods` must be provided for the consensus method.")
-            for method in _methods:
-                if verbose:
-                    print(f"Running {method.method_name}")
 
-                lrs[method.method_name] = _run_method(
-                    lr_res=lr_res.copy(),
-                    adata=adata,
-                    groupby=groupby,
-                    expr_prop=expr_prop,
-                    _score=method,
-                    _key_cols=_key_cols,
-                    _complex_cols=method.complex_cols,
-                    _add_cols=method.add_cols,
-                    n_perms=n_perms,
-                    seed=seed,
-                    return_all_lrs=return_all_lrs,
-                    n_jobs=n_jobs,
-                    verbose=verbose,
-                    _aggregate_flag=True,
-                )
-            if _consensus_opts is False:  # Return by method results as they are
-                return lrs
-            # local import: `_rank_aggregate` imports this module
-            from liana.method.sc._rank_aggregate import AggregateClass
+def _add_proximity(
+    lr_res: pd.DataFrame,
+    adata: AnnData,
+    spatial_key: str,
+    spatial_kwargs: SpatialKwargs | None,
+    verbose: bool,
+) -> pd.DataFrame:
+    """Attach a per-cluster-pair spatial proximity weight to ``lr_res``.
 
-            if not isinstance(_score, AggregateClass):
-                raise TypeError("Aggregation requires an `AggregateClass` score.")
-            lr_res = _aggregate(
-                lrs,
-                consensus=_score,
-                aggregate_method=_aggregate_method,
-                _key_cols=_key_cols,
-                _consensus_opts=_consensus_opts,
-                verbose=verbose,
-            )
-        else:  # Run the specific method in mind
-            lr_res = _run_method(
-                lr_res=lr_res,
-                adata=adata,
-                groupby=groupby,
-                expr_prop=expr_prop,
-                _score=_score,
-                _key_cols=_key_cols,
-                _complex_cols=_complex_cols,
-                _add_cols=_add_cols,
-                n_perms=n_perms,
-                return_all_lrs=return_all_lrs,
-                n_jobs=n_jobs,
-                verbose=verbose,
-                seed=seed,
-            )
-    else:  # Just return lr_res
-        lr_res = _filter_reassemble_complexes(
+    The weight is zeroed for pairs that `spatial_pair_proximity` did not find in contact, so it both masks cluster pairs that never meet and grades the ones that do.
+    """
+    if spatial_key not in adata.obsm:
+        raise KeyError(f"`spatial_key` {spatial_key!r} not found in `adata.obsm`.")
+
+    proximity_df = spatial_pair_proximity(
+        adata=adata, groupby=I.label, spatial_key=spatial_key, verbose=verbose, **(spatial_kwargs or SpatialKwargs())
+    )
+    proximity_df[C.proximity] = proximity_df[C.proximity] * proximity_df["interacting"]
+
+    lr_res = lr_res.merge(proximity_df[[P.source, P.target, C.proximity]], on=[P.source, P.target], how="left")
+    lr_res[C.proximity] = lr_res[C.proximity].fillna(0.0)
+
+    return lr_res
+
+
+@d.dedent
+def liana_pipe(
+    adata: AnnData | MuData,
+    groupby: str,
+    resource_name: str,
+    resource: pd.DataFrame | None,
+    interactions: list[tuple[str, str]] | None,
+    groupby_pairs: pd.DataFrame | None,
+    expr_prop: float,
+    min_cells: int,
+    base: float,
+    de_method: DeMethod,
+    n_perms: int | None,
+    seed: int,
+    verbose: bool,
+    use_raw: bool,
+    n_jobs: int,
+    layer: str | None,
+    score: MethodMeta | None = None,
+    supp_columns: list[str] | None = None,
+    return_all_lrs: bool = False,
+    spatial_key: str | None = None,
+    spatial_kwargs: SpatialKwargs | None = None,
+    mdata_kwargs: MdataKwargs | None = None,
+) -> pd.DataFrame:
+    """
+    Single-cell Ligand-receptor inference pipeline.
+
+    Parameters
+    ----------
+    %(adata)s
+    %(groupby)s
+    %(resource_name)s
+    %(resource)s
+    %(interactions)s
+    %(groupby_pairs)s
+    %(expr_prop)s
+    %(min_cells)s
+    %(base)s
+    %(de_method)s
+    %(n_perms_sc)s
+    %(seed)s
+    %(verbose)s
+    %(use_raw)s
+    %(layer)s
+    score
+        The method to score the interactions with. `None` returns the ligand-receptor
+        statistics without scoring them.
+    supp_columns
+        Additional columns to be added to the output of each method.
+    %(return_all_lrs)s
+    %(spatial_key)s
+    %(spatial_kwargs)s
+    %(mdata_kwargs)s
+
+    Returns
+    -------
+    A DataFrame with ligand-receptor results
+    """
+    complex_cols = score.complex_cols if score is not None else [C.ligand_means, C.receptor_means]
+    add_cols = (score.add_cols if score is not None else M.get_all_values()) + _SUBUNIT_COLS + (supp_columns or [])
+
+    adata, lr_res = _prepare_lr_stats(
+        adata=adata,
+        groupby=groupby,
+        resource_name=resource_name,
+        resource=resource,
+        interactions=interactions,
+        groupby_pairs=groupby_pairs,
+        min_cells=min_cells,
+        base=base,
+        de_method=de_method,
+        verbose=verbose,
+        use_raw=use_raw,
+        layer=layer,
+        complex_cols=complex_cols,
+        add_cols=add_cols,
+        spatial_key=spatial_key,
+        spatial_kwargs=spatial_kwargs,
+        mdata_kwargs=mdata_kwargs or MdataKwargs(),
+    )
+
+    if score is None:
+        return _filter_reassemble_complexes(
             lr_res=lr_res,
-            _key_cols=_key_cols,
+            _key_cols=P.primary,
             expr_prop=expr_prop,
-            complex_cols=_complex_cols,
+            complex_cols=complex_cols,
             return_all_lrs=return_all_lrs,
         )
 
-    if _score is not None:
-        orderby, ascending = (
-            (_score.magnitude, _score.magnitude_ascending)
-            if _score.magnitude is not None
-            else (_score.specificity, _score.specificity_ascending)
+    lr_res = _run_method(
+        lr_res=lr_res,
+        adata=adata,
+        groupby=groupby,
+        expr_prop=expr_prop,
+        _score=score,
+        _key_cols=P.primary,
+        _complex_cols=complex_cols,
+        _add_cols=add_cols,
+        n_perms=n_perms,
+        seed=seed,
+        return_all_lrs=return_all_lrs,
+        n_jobs=n_jobs,
+        verbose=verbose,
+    )
+
+    return _sort_by_score(lr_res, score)
+
+
+@d.dedent
+def liana_pipe_consensus(
+    adata: AnnData | MuData,
+    groupby: str,
+    resource_name: str,
+    resource: pd.DataFrame | None,
+    interactions: list[tuple[str, str]] | None,
+    groupby_pairs: pd.DataFrame | None,
+    expr_prop: float,
+    min_cells: int,
+    base: float,
+    de_method: DeMethod,
+    n_perms: int | None,
+    seed: int,
+    verbose: bool,
+    use_raw: bool,
+    n_jobs: int,
+    layer: str | None,
+    consensus: AggregateClass,
+    consensus_opts: list[str] | Literal[False] | None = None,
+    aggregate_method: Literal["rra", "mean"] = "rra",
+    return_all_lrs: bool = False,
+    spatial_key: str | None = None,
+    spatial_kwargs: SpatialKwargs | None = None,
+    mdata_kwargs: MdataKwargs | None = None,
+) -> pd.DataFrame | dict[str, pd.DataFrame]:
+    """
+    Run several ligand-receptor methods over one set of statistics and aggregate their ranks.
+
+    The ligand-receptor statistics are assembled once and re-scored by each method, so the
+    methods differ only in how they score, not in what they see.
+
+    Parameters
+    ----------
+    %(adata)s
+    %(groupby)s
+    %(resource_name)s
+    %(resource)s
+    %(interactions)s
+    %(groupby_pairs)s
+    %(expr_prop)s
+    %(min_cells)s
+    %(base)s
+    %(de_method)s
+    %(n_perms_sc)s
+    %(seed)s
+    %(verbose)s
+    %(use_raw)s
+    %(layer)s
+    consensus
+        The aggregation to combine the methods' ranks with.
+    consensus_opts
+        Ways to aggregate interactions across methods; by default both `'Specificity'`
+        and `'Magnitude'`. `False` returns each method's results untouched.
+    aggregate_method
+        RobustRankAggregate (`'rra'`) or mean rank (`'mean'`).
+    %(return_all_lrs)s
+    %(spatial_key)s
+    %(spatial_kwargs)s
+    %(mdata_kwargs)s
+
+    Returns
+    -------
+    A DataFrame of aggregated ligand-receptor results, or -- when `consensus_opts` is
+    `False` -- a DataFrame per method, keyed by method name.
+    """
+    add_cols = consensus.add_cols + _SUBUNIT_COLS
+
+    adata, lr_res = _prepare_lr_stats(
+        adata=adata,
+        groupby=groupby,
+        resource_name=resource_name,
+        resource=resource,
+        interactions=interactions,
+        groupby_pairs=groupby_pairs,
+        min_cells=min_cells,
+        base=base,
+        de_method=de_method,
+        verbose=verbose,
+        use_raw=use_raw,
+        layer=layer,
+        complex_cols=consensus.complex_cols,
+        add_cols=add_cols,
+        spatial_key=spatial_key,
+        spatial_kwargs=spatial_kwargs,
+        mdata_kwargs=mdata_kwargs or MdataKwargs(),
+    )
+
+    lrs: dict[str, pd.DataFrame] = {}
+    for method in consensus.methods:
+        if verbose:
+            print(f"Running {method.method_name}")
+
+        lrs[method.method_name] = _run_method(
+            lr_res=lr_res.copy(),
+            adata=adata,
+            groupby=groupby,
+            expr_prop=expr_prop,
+            _score=method,
+            _key_cols=P.primary,
+            _complex_cols=method.complex_cols,
+            _add_cols=method.add_cols,
+            n_perms=n_perms,
+            seed=seed,
+            return_all_lrs=return_all_lrs,
+            n_jobs=n_jobs,
+            verbose=verbose,
+            _aggregate_flag=True,
         )
-        if orderby is None:
-            raise ValueError(f"`{_score.method_name}` reports neither a magnitude nor a specificity score.")
 
-        lr_res = lr_res.sort_values(by=orderby, ascending=bool(ascending))
+    if consensus_opts is False:
+        return lrs
 
-    return lr_res
+    aggregated = _aggregate(
+        lrs,
+        consensus=consensus,
+        aggregate_method=aggregate_method,
+        _key_cols=P.primary,
+        _consensus_opts=consensus_opts,
+        verbose=verbose,
+    )
+
+    return _sort_by_score(aggregated, consensus)
+
+
+def _sort_by_score(lr_res: pd.DataFrame, score: MethodMeta) -> pd.DataFrame:
+    """Order the results by the method's magnitude, falling back to its specificity."""
+    orderby, ascending = (
+        (score.magnitude, score.magnitude_ascending)
+        if score.magnitude is not None
+        else (score.specificity, score.specificity_ascending)
+    )
+    if orderby is None:
+        raise ValueError(f"`{score.method_name}` reports neither a magnitude nor a specificity score.")
+
+    return lr_res.sort_values(by=orderby, ascending=bool(ascending))
 
 
 def _get_lr(
@@ -375,7 +517,7 @@ def _get_lr(
 
     # check if genes are ordered correctly
     if not list(adata.var_names) == list(dedict[labels[0]]["names"]):
-        raise AssertionError("Variable names did not match DE results!")
+        raise RuntimeError("Variable names did not match DE results!")
 
     # Calculate Mean, logFC and z-scores by group
     for label in labels:
@@ -404,7 +546,6 @@ def _get_lr(
     )
 
     if M.mat_mean in relevant_cols:
-        assert isinstance(mat_mean, np.float32)
         lr_res[M.mat_mean] = mat_mean
 
     # NOTE: this is not needed
@@ -474,11 +615,10 @@ def _run_method(
     )
 
     _add_cols = _add_cols + [P.ligand, P.receptor]
-    relevant_cols = reduce(lambda left, right: list(np.union1d(left, right)), [_key_cols, _complex_cols, _add_cols])
+    relevant_cols = list(np.union1d(np.union1d(_key_cols, _complex_cols), _add_cols))
 
-    # Preserve proximity column if present
-    if "proximity" in lr_res.columns:
-        relevant_cols = list(relevant_cols) + ["proximity"]
+    if C.proximity in lr_res.columns:
+        relevant_cols = list(relevant_cols) + [C.proximity]
 
     if return_all_lrs:
         relevant_cols = list(relevant_cols) + [I.lrs_to_keep]
@@ -488,16 +628,14 @@ def _run_method(
         lr_res = lr_res[lr_res[I.lrs_to_keep]]
     lr_res = lr_res[relevant_cols]
 
-    # Extract proximity weights if present in lr_res
-    proximity_weights = np.asarray(lr_res["proximity"].to_numpy()) if "proximity" in lr_res.columns else None
+    proximity_weights = np.asarray(lr_res[C.proximity].to_numpy()) if C.proximity in lr_res.columns else None
 
-    if (M.mat_max in _add_cols) & (_score.method_name == "CellChat"):
-        # CellChat matrix_max
+    if M.ligand_trimean in _complex_cols:
         norm_factor = np.unique(lr_res[M.mat_max].to_numpy())[0]
-        agg_fn: _AggFn = _trimean  # Calculate sparse matrix quantiles?
+        aggregation: Aggregation = "trimean"
     else:
         norm_factor = None
-        agg_fn = np.mean  # NOTE: change to sparse matrix mean?
+        aggregation = "mean"
 
     if _score.fun is None:
         raise ValueError(f"`{_score.method_name}` has no scoring function.")
@@ -509,7 +647,7 @@ def _run_method(
                 adata=adata,
                 n_perms=n_perms,
                 seed=seed,
-                agg_fn=agg_fn,
+                aggregation=aggregation,
                 norm_factor=norm_factor,
                 n_jobs=n_jobs,
                 verbose=verbose,
@@ -557,23 +695,14 @@ def _run_method(
         if lr_res[_score.specificity].isna().all():
             lr_res = lr_res.drop(_score.specificity, axis=1)
 
-    # Remove proximity column if present (internal use only)
-    if "proximity" in lr_res.columns:
-        lr_res = lr_res.drop("proximity", axis=1)
+    if C.proximity in lr_res.columns:
+        lr_res = lr_res.drop(C.proximity, axis=1)
 
     return lr_res
 
 
 def _assign_min_or_max(x: pd.Series, x_ascending: bool | None) -> float:
     return float(np.max(x) if x_ascending else np.min(x))
-
-
-def _trimean(a: csr_matrix, axis: int = 0) -> np.ndarray:
-    """Tukey's trimean, the location estimate CellChat scores with."""
-    dense = a.toarray()
-    quantiles = np.quantile(dense, q=[0.25, 0.75], axis=axis)
-    median = np.median(dense, axis=axis)
-    return np.asarray((quantiles[0] + 2 * median + quantiles[1]) / 4)
 
 
 def _cluster_stats(adata: AnnData) -> pd.DataFrame:

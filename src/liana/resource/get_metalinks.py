@@ -1,60 +1,42 @@
-import os
 import sqlite3
+from pathlib import Path
 
 import pandas as pd
+import pooch
+import scanpy as sc
 
-from liana._core._common import _check_if_installed, _logg
+from liana._core._common import _logg
+
+_METALINKS_URL = "https://github.com/scverse/liana/releases/download/metalinksdb/metalinksdb.db"
+_METALINKS_HASH = "sha256:84df58e659cd0fe318b10f6d5d7ac1f16806b1088701fccf4260e78ba0982513"
 
 
-def _download_metalinksdb(verbose: bool = True) -> str:
+def _download_metalinksdb(cache_dir: str | Path | None = None, verbose: bool = True) -> Path:
     """
     Ensures the Metalinksdb is downloaded and available for use.
 
-    If the Metalinks database is not present in the current working directory, it downloads it.
+    Parameters
+    ----------
+    cache_dir
+        Directory the database is cached in, defaulting to :attr:`scanpy.settings.datasetdir`.
+    verbose
+        Verbosity flag.
 
     Returns
     -------
     The path to the downloaded database file.
-
     """
-    requests = _check_if_installed("requests")
+    _logg("Retrieving database...", verbose=verbose)
 
-    # GitHub Releases URL (CI-friendly, no WAF issues)
-    METALINKS_URL = "https://github.com/scverse/liana-py/releases/download/metalinksdb/metalinksdb.db"
-
-    db_file_name = "metalinksdb.db"
-    db_path = os.path.join(os.getcwd(), db_file_name)
-
-    if os.path.exists(db_path):
-        if os.path.getsize(db_path) == 0:
-            _logg("Existing database file is empty. Removing and re-downloading...", verbose=verbose)
-            os.remove(db_path)
-        else:
-            return db_path
-
-    _logg("Downloading database...", verbose=verbose)
-    try:
-        response = requests.get(METALINKS_URL, stream=True, allow_redirects=True)
-        response.raise_for_status()
-
-        with open(db_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-        # Validate the downloaded file
-        file_size = os.path.getsize(db_path)
-        if file_size == 0:
-            os.remove(db_path)
-            raise RuntimeError("Downloaded file is empty. Please check the URL and try again.")
-
-        _logg(f"Database downloaded and saved to {db_path} ({file_size} bytes).", verbose=verbose)
-    except (requests.exceptions.RequestException, OSError, RuntimeError) as e:
-        # Clean up failed download
-        if os.path.exists(db_path):
-            os.remove(db_path)
-        raise RuntimeError(f"Failed to download database: {e}") from e
-
-    return db_path
+    return Path(
+        pooch.retrieve(
+            _METALINKS_URL,
+            known_hash=_METALINKS_HASH,
+            fname="metalinksdb.db",
+            path=sc.settings.datasetdir if cache_dir is None else cache_dir,
+            progressbar=verbose,
+        )
+    )
 
 
 def _format_clauses(
@@ -69,7 +51,7 @@ def _format_clauses(
 
 
 def get_metalinks(
-    db_path: str | None = None,
+    db_path: str | Path | None = None,
     types: str | list[str] | None = None,
     cell_location: str | list[str] | None = None,
     tissue_location: str | list[str] | None = None,
@@ -123,11 +105,9 @@ def get_metalinks(
             types=["lr"],
             biospecimen_location="Blood",
         )
-
     """
-    if db_path is None:
-        db_path = _download_metalinksdb()
-    conn = sqlite3.connect(db_path)
+    path = Path(db_path) if db_path is not None else _download_metalinksdb()
+    conn = sqlite3.connect(path)
 
     # Adjusted SELECT statement to exclude the source column
     base_query = """
@@ -219,12 +199,9 @@ def get_metalinks_values(table_name: str, column_name: str, db_path: str | None 
     :func:`liana.rs.get_metalinks`::
 
         get_metalinks_values(table_name="tissue_location", column_name="tissue_location")
-
     """
-    if db_path is None:
-        db_path = _download_metalinksdb()
-    conn = sqlite3.connect(db_path)
-    conn = sqlite3.connect(db_path)
+    path = Path(db_path) if db_path is not None else _download_metalinksdb()
+    conn = sqlite3.connect(path)
     cursor = conn.cursor()
 
     query = f"SELECT DISTINCT {column_name} FROM {table_name};"
@@ -255,11 +232,9 @@ def describe_metalinks(db_path: str | None = None, return_output: bool = False) 
     It prints the tables and columns that :func:`liana.rs.get_metalinks` and :func:`liana.rs.get_metalinks_values` query::
 
         describe_metalinks()
-
     """
-    if db_path is None:
-        db_path = _download_metalinksdb()
-    conn = sqlite3.connect(db_path)
+    path = Path(db_path) if db_path is not None else _download_metalinksdb()
+    conn = sqlite3.connect(path)
     cursor = conn.cursor()
 
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")

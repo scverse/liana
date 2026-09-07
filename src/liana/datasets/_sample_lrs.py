@@ -20,7 +20,6 @@ def sample_lrs(by_sample: bool = False) -> pd.DataFrame:
     A `DataFrame` of `source`/`target` cell types, `ligand_complex`/
     `receptor_complex` pairs, and random `magnitude` and `specificity_rank`
     scores.
-
     """
     row_num = 200
     rng = np.random.default_rng(seed=1)

@@ -153,7 +153,6 @@ class SpatialInflow:
         `'CD4+/CD25 T Reg^HLA-DRA^CD4'`. Cell-type proportions per spot can be given
         via `obsm_key` instead of `groupby`, which is what deconvolved spot data calls
         for.
-
         """
         # Process MuData or AnnData - check instance and process accordingly
         _check_instance(adata)  # raises for anything other than AnnData/MuData

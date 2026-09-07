@@ -127,7 +127,7 @@ def lric_lineplot(
 
 
 @d.dedent
-def lric_divergence_plot(
+def lric_divergence(
     adata: AnnData | None = None,
     uns_key: str = "lric",
     liana_res: pd.DataFrame | None = None,
@@ -181,7 +181,7 @@ def lric_divergence_plot(
     >>> import liana as li
     >>> adata = li.ds.generate_toy_spatial()
     >>> li.mt.cross_pcf(adata, groupby="bulk_labels", key_added="cross_pcf")
-    >>> p = li.pl.lric_divergence_plot(
+    >>> p = li.pl.lric_divergence(
     ...     adata,
     ...     "cross_pcf",
     ...     feature_a=dict(source="CD14+ Monocyte", target="CD34+"),

@@ -20,6 +20,7 @@ authors = [
   { name = "Aurelien Dugourd" },
   { name = "Jovan Tanevski" },
   { name = "Ricardo Omar Ramirez Flores" },
+  { name = "Lukas Heumos" },
   { name = "Julio Saez-Rodriguez" },
 ]
 requires-python = ">=3.12"
@@ -56,13 +57,13 @@ optional-dependencies.extras = [
   "omnipath>=1.0.6",
   "pydeseq2>=0.3.5",
   "pyscipopt>=5.2.1",
-  "requests>=2.25.1",
   "squidpy>=1.5",      # backs li.mt.MistyData / spatial_neighbors (lazy-imported)
 ]
 # Runtime deps to execute the tutorial notebooks under docs/notebooks on CPU.
 # = extras (liana features) + notebook-only viz/runtime packages not imported by src.
 optional-dependencies.tutorials = [
   "adjusttext",
+  "graphviz",
   "liana[extras]",
   "marsilea",
   "matplotlib",
@@ -206,6 +207,7 @@ lint.ignore = [
 lint.per-file-ignores."*/__init__.py" = [ "F401" ]
 lint.per-file-ignores."docs/*" = [ "I" ]
 lint.per-file-ignores."tests/*" = [ "D" ]
+lint.flake8-tidy-imports.banned-api."matplotlib.pyplot.show".msg = "return the figure instead; showing is the caller's decision"
 lint.pydocstyle.convention = "numpy"
 
 [tool.mypy]
@@ -226,6 +228,7 @@ untyped_calls_exclude = [
   "numba",
   "omnipath",
   "plotnine",
+  "pooch",
   "pydeseq2",
   "scanpy",
   "sklearn",
@@ -262,6 +265,7 @@ module = [
   "numba.*",
   "omnipath.*",
   "plotnine.*",
+  "pooch.*",
   "pydeseq2.*",
   "scanpy.*",
   "session_info2.*",

@@ -18,7 +18,6 @@ def _inter_score(x: DataFrame) -> tuple[Series, None]:
     inter_score
         Pair-wise minimum CDF
     None
-
     """
     inter_score = np.minimum(x["ligand_cdf"], x["receptor_cdf"])
     return Series(inter_score, index=x.index), None

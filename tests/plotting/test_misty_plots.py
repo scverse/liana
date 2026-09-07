@@ -1,3 +1,5 @@
+from contextlib import suppress
+
 import pandas as pd
 import pytest
 from anndata import AnnData
@@ -43,7 +45,7 @@ def interactions() -> DataFrame:
 
 
 def test_target_contributions_plot(misty: MistyData) -> None:
-    plot_data = _frame(pl.contributions(misty=misty))
+    plot_data = _frame(pl.misty_contributions(misty=misty))
 
     # melted to one row per target x view, with no target or view dropped
     targets = misty.uns["target_metrics"]["target"]
@@ -52,38 +54,40 @@ def test_target_contributions_plot(misty: MistyData) -> None:
     assert plot_data.shape[0] == len(targets) * 2
 
     # `return_fig=False` draws the plot instead of handing it back
-    assert pl.contributions(misty=misty, return_fig=False) is None
+    assert pl.misty_contributions(misty=misty, return_fig=False) is None
 
 
 def test_target_metrics_plot(misty: MistyData) -> None:
     target_metrics = misty.uns["target_metrics"]
 
-    plot_data = _frame(pl.target_metrics(misty=misty, stat="gain_R2"))
+    plot_data = _frame(pl.misty_target_metrics(misty=misty, stat="gain_R2"))
     assert set(plot_data["target"]) == set(target_metrics["target"])
 
     # top_n keeps the n best targets by the statistic asked for
-    top = _frame(pl.target_metrics(misty=misty, stat="gain_R2", top_n=1))
+    top = _frame(pl.misty_target_metrics(misty=misty, stat="gain_R2", top_n=1))
     best = target_metrics.loc[target_metrics["gain_R2"].idxmax(), "target"]
     assert set(top["target"]) == {best}
 
-    filtered = _frame(pl.target_metrics(misty=misty, stat="gain_R2", filter_fn=lambda x: x["multi_R2"] > 0.5))
+    filtered = _frame(pl.misty_target_metrics(misty=misty, stat="gain_R2", filter_fn=lambda x: x["multi_R2"] > 0.5))
     expected = target_metrics[target_metrics["multi_R2"] > 0.5]["target"]
     assert 0 < len(expected) < len(target_metrics)  # else the check below is vacuous
     assert set(filtered["target"]) == set(expected)
 
-    assert pl.target_metrics(misty=misty, stat="gain_R2", return_fig=False) is None
+    assert pl.misty_target_metrics(misty=misty, stat="gain_R2", return_fig=False) is None
 
 
 def test_interactions_plot(misty: MistyData, interactions: DataFrame) -> None:
-    pl.interactions(misty=misty, top_n=3, view="extra", key=abs, ascending=False)
-    plot_data = _frame(pl.interactions(interactions=interactions, view="extra", filter_fn=lambda x: x["group"] == "b"))
+    pl.misty_interactions(misty=misty, top_n=3, view="extra", key=abs, ascending=False)
+    plot_data = _frame(
+        pl.misty_interactions(interactions=interactions, view="extra", filter_fn=lambda x: x["group"] == "b")
+    )
     assert plot_data.shape[0] == 3
 
-    assert pl.interactions(misty=misty, view="extra", return_fig=False) is None
+    assert pl.misty_interactions(misty=misty, view="extra", return_fig=False) is None
 
 
 def test_target_metrics_aggregate(target_metrics: DataFrame) -> None:
-    plot_data = _frame(pl.target_metrics(target_metrics=target_metrics, stat="gain_R2", aggregate_fn="mean"))
+    plot_data = _frame(pl.misty_target_metrics(target_metrics=target_metrics, stat="gain_R2", aggregate_fn="mean"))
 
     # every group is kept - aggregation only decides the order the targets
     # are drawn in, best mean first
@@ -94,7 +98,7 @@ def test_target_metrics_aggregate(target_metrics: DataFrame) -> None:
 
 def test_contributions_aggregate(target_metrics: DataFrame) -> None:
     plot_data = _frame(
-        pl.contributions(target_metrics=target_metrics, view_names=["intra", "extra"], aggregate_fn="median")
+        pl.misty_contributions(target_metrics=target_metrics, view_names=["intra", "extra"], aggregate_fn="median")
     )
 
     n_targets = target_metrics["target"].nunique()
@@ -105,7 +109,7 @@ def test_contributions_aggregate(target_metrics: DataFrame) -> None:
 
 
 def test_interactions_aggregate(interactions: DataFrame) -> None:
-    plot_data = _frame(pl.interactions(interactions=interactions, view="intra", aggregate_fn="sum"))
+    plot_data = _frame(pl.misty_interactions(interactions=interactions, view="intra", aggregate_fn="sum"))
 
     # only the requested view is drawn, with importances summed over the groups
     intra = interactions[interactions["view"] == "intra"]
@@ -117,30 +121,30 @@ def test_interactions_aggregate(interactions: DataFrame) -> None:
 
 def test_misty_plots_raise_without_data() -> None:
     with pytest.raises(ValueError, match="Provide either a misty object or a target_metrics"):
-        pl.target_metrics(stat="gain_R2")
+        pl.misty_target_metrics(stat="gain_R2")
 
     with pytest.raises(ValueError, match="Provide either a misty object or a target_metrics"):
-        pl.contributions(view_names=["intra", "extra"])
+        pl.misty_contributions(view_names=["intra", "extra"])
 
     with pytest.raises(ValueError, match="Provide either a misty object or interactions"):
-        pl.interactions(view="intra")
+        pl.misty_interactions(view="intra")
 
 
 def test_misty_plots_raise_on_missing_args(
     misty: MistyData, target_metrics: DataFrame, interactions: DataFrame
 ) -> None:
     with pytest.raises(ValueError, match="Provide a statistic to plot"):
-        pl.target_metrics(misty=misty, stat=None)
+        pl.misty_target_metrics(misty=misty, stat=None)
 
     with pytest.raises(ValueError, match="Provide a list of view names to plot"):
-        pl.contributions(target_metrics=target_metrics)
+        pl.misty_contributions(target_metrics=target_metrics)
 
     with pytest.raises(ValueError, match="Provide a ``view`` to plot"):
-        pl.interactions(interactions=interactions, view=None)
+        pl.misty_interactions(interactions=interactions, view=None)
 
 
 def test_contributions_filter(misty: MistyData) -> None:
-    plot_data = _frame(pl.contributions(misty=misty, filter_fn=lambda x: x["multi_R2"] > 0.5))
+    plot_data = _frame(pl.misty_contributions(misty=misty, filter_fn=lambda x: x["multi_R2"] > 0.5))
 
     target_metrics = misty.uns["target_metrics"]
     expected = target_metrics[target_metrics["multi_R2"] > 0.5]["target"]
@@ -151,14 +155,14 @@ def test_contributions_filter(misty: MistyData) -> None:
 def test_contributions_drops_intra_when_absent(misty: MistyData) -> None:
     # `intra` is dropped from the views when it is not among the metrics
     del misty.uns["target_metrics"]["intra"]
-    plot_data = _frame(pl.contributions(misty=misty))
+    plot_data = _frame(pl.misty_contributions(misty=misty))
     assert set(plot_data["view"]) == {"extra"}
 
 
 def test_contributions_filter_on_categorical_target(target_metrics: DataFrame) -> None:
     target_metrics["target"] = target_metrics["target"].astype("category")
     plot_data = _frame(
-        pl.contributions(
+        pl.misty_contributions(
             target_metrics=target_metrics,
             view_names=["intra", "extra"],
             aggregate_fn="mean",
@@ -166,3 +170,24 @@ def test_contributions_filter_on_categorical_target(target_metrics: DataFrame) -
         )
     )
     assert "a" not in set(plot_data["target"].cat.categories)
+
+
+@pytest.mark.parametrize(
+    ("deprecated", "current"),
+    [
+        ("contributions", "misty_contributions"),
+        ("interactions", "misty_interactions"),
+        ("target_metrics", "misty_target_metrics"),
+        ("circle_plot", "circle"),
+        ("annulus_plot", "annulus"),
+        ("lric_divergence_plot", "lric_divergence"),
+    ],
+)
+def test_renamed_plots_still_resolve(deprecated: str, current: str) -> None:
+    alias = getattr(pl, deprecated)
+
+    assert f"Use `liana.pl.{current}` instead" in alias.__deprecated__
+    assert not hasattr(getattr(pl, current), "__deprecated__")
+
+    with pytest.warns(FutureWarning, match=f"{deprecated} is deprecated"), suppress(TypeError, ValueError):
+        alias()

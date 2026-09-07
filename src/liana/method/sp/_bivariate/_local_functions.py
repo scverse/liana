@@ -52,7 +52,6 @@ class LocalFunction:
         The actual function
     reference
         Reference/description for the function
-
     """
 
     instances: dict[str, LocalFunction] = {}
@@ -103,7 +102,6 @@ class LocalFunction:
             Matrix with the local scores
         local_pvals
             Matrix of resulting p-values
-
         """
         norm_weight: Weight = weight
         x_dense: np.ndarray
@@ -205,7 +203,6 @@ class LocalFunction:
         Returns
         -------
         2D array of p-values with shape(n_spot, xy_n)
-
         """
         spot_n = x_mat.shape[0]
 
@@ -252,7 +249,6 @@ class LocalFunction:
         Returns
         -------
         2D array of standard deviations with shape(n_spot, xy_n)
-
         """
         dense = weight if isinstance(weight, np.ndarray) else np.asarray(weight.todense())
 
@@ -339,7 +335,6 @@ def _vectorized_correlations(
     Vectorized implementation of weighted correlations.
 
     Note: due to the imprecision of np.sum and np.dot, the function is accurate to 5 decimal places.
-
     """
     if method not in ["pearson", "spearman"]:
         raise ValueError("method must be one of 'pearson', 'spearman'")
@@ -416,7 +411,6 @@ def _local_morans(x_mat: np.ndarray, y_mat: np.ndarray, weight: Weight) -> np.nd
     Returns
     -------
     Returns 2D array of local Moran's I with shape(n_spot, xy_n)
-
     """
     local_x = x_mat * (weight @ y_mat)
     local_y = y_mat * (weight @ x_mat)

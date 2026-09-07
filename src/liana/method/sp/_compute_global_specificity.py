@@ -85,7 +85,6 @@ def compute_global_specificity(
     more permutations than the 10 here -- the smallest attainable p-value is
     `1/(n_perms+1)`. `n_jobs=1` avoids the process-spawn overhead that the default `-1`
     costs at this size.
-
     """
     if groupby not in adata.obs.columns:
         raise KeyError(f"`groupby`='{groupby}' not found in adata.obs.")

@@ -48,7 +48,6 @@ def query_bandwidth(
     >>> import liana as li
     >>> adata = li.ds.generate_toy_spatial()
     >>> fig, df = li.pp.query_bandwidth(adata.obsm["spatial"], start=0, end=1000)
-
     """
     tree = BallTree(coordinates, metric="euclidean")
     df = DataFrame()

@@ -50,7 +50,6 @@ def assert_covered(
     ------
     ValueError
         When the the number of missing elements in subset (with respect to superset) is over the threshold
-
     """
     subset_arr = np.asarray(subset)
     is_missing = ~np.isin(subset_arr, superset)
@@ -124,7 +123,6 @@ def prep_check_adata(
     Returns
     -------
     Anndata object to be used downstream
-
     """
     X = _choose_mtx_rep(adata=adata, use_raw=use_raw, layer=layer, verbose=verbose)
     old_obsp = dict(adata.obsp)
@@ -221,18 +219,8 @@ def check_vars(var_names: Iterable[str], complex_sep: str | None, verbose: bool 
     complex_sep
         Separator or any substring to check for in the variable names
     %(verbose)s
-
     """
-    var_issues = []
-    if complex_sep is not None:
-        for name in var_names:
-            if complex_sep in name:
-                var_issues.append(name)
-    else:
-        pass
-
-    # XXX: Achieves the same but faster:
-    # var_issues = [] if complex_sep is None else [i for i in var_names if complex_sep in i]
+    var_issues = [] if complex_sep is None else [name for name in var_names if complex_sep in name]
 
     _logg(
         f"{var_issues} contain `{complex_sep}`. Consider replacing those!",
@@ -262,7 +250,6 @@ def filter_resource(resource: DataFrame, var_names: Index | NDArray[Any]) -> Dat
     Returns
     -------
     A filtered resource DataFrame
-
     """
     # Remove those without any subunit
     resource = resource[(np.isin(resource.ligand, var_names)) & (np.isin(resource.receptor, var_names))]
@@ -296,7 +283,7 @@ def _choose_mtx_rep(
 
     Returns
     -------
-        The matrix to be used by liana-py.
+        The matrix to be used by LIANA+.
     """
     if layer is not None and use_raw:
         raise ValueError("Cannot specify `layer` and have `use_raw=True`.")
@@ -322,7 +309,7 @@ def _choose_mtx_rep(
 def _check_groupby(adata: AnnData, groupby: str, verbose: bool) -> None:
     obs = get_obs(adata)
     if groupby not in obs.columns:
-        raise AssertionError(f"`{groupby}` not found in `adata.obs.columns`.")
+        raise KeyError(f"`{groupby}` not found in `adata.obs.columns`.")
     if not obs[groupby].dtype.name == "category":
         _logg(f"Converting `{groupby}` to categorical!", level="warn", verbose=verbose)
         obs[groupby] = obs[groupby].astype("category")

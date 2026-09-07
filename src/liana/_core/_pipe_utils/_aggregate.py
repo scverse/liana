@@ -46,7 +46,6 @@ def _aggregate(
     Returns
     -------
     A long pd.DataFrame with ranked LRs
-
     """
     # join the sc to the whole universe between the methods
     if _key_cols is None:
@@ -106,9 +105,9 @@ def _rank_aggregate(
     Returns
     -------
     An array of values /w length of lr_res.shape[0]
-
     """
-    assert aggregate_method in ["rra", "mean"]
+    if aggregate_method not in ("rra", "mean"):
+        raise ValueError(f"`aggregate_method` must be 'rra' or 'mean', got {aggregate_method!r}.")
 
     # methods whose score was not computed (e.g. permutation p-values with `n_perms=None`) have no column
     specs = {method: spec for method, spec in specs.items() if spec[0] in lr_res.columns}
@@ -143,7 +142,6 @@ def _corr_beta_pvals(p: NDArray[np.floating], k: int) -> NDArray[np.floating]:
     Returns
     -------
     An array with corrected p-values
-
     """
     p = np.clip(p * k, a_min=0, a_max=1)
     return p
@@ -170,7 +168,6 @@ def _rho_scores(
     Returns
     -------
     A vector of pvals as implemented in the RRA method
-
     """
     # Sort values by sources (rows)
     rmat = np.sort(rmat, axis=1)
@@ -196,7 +193,6 @@ def _robust_rank_aggregate(rmat: NDArray[np.floating]) -> NDArray[np.floating]:
     Returns
     -------
     An array with p-values for each row
-
     """
     # 0-1 values depending on relative rank of
     # each interaction divided by the max of each method

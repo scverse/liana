@@ -4,7 +4,7 @@ from anndata import AnnData
 from pandas import DataFrame
 from tests._helpers import invalid
 
-from liana.plotting import circle_plot
+from liana.plotting import circle
 from liana.plotting._circle_plot import _get_adata_colors, _pivot_liana_res, _set_adata_color, get_mask_df
 
 
@@ -21,7 +21,7 @@ def adata(pbmc68k: AnnData, liana_res: DataFrame) -> AnnData:
 def test_circle_plot(adata: AnnData, liana_res: DataFrame) -> None:
     # circle_plot returns bare Axes, so assert on the adjacency it is built from:
     # 'mean' averages the score per source-target pair ...
-    circle_plot(adata, groupby="random", liana_res=liana_res, pivot_mode="mean", score_key="specificity_rank")
+    circle(adata, groupby="random", liana_res=liana_res, pivot_mode="mean", score_key="specificity_rank")
     means = _pivot_liana_res(liana_res, score_key="specificity_rank", mode="mean")
     expected = liana_res.groupby(["source", "target"])["specificity_rank"].mean()
     assert means.loc["A", "B"] == pytest.approx(expected.loc["A", "B"])
@@ -29,7 +29,7 @@ def test_circle_plot(adata: AnnData, liana_res: DataFrame) -> None:
     assert set(means.columns) == set(liana_res["target"])
 
     # ... while 'counts' counts the interactions surviving the filter
-    circle_plot(
+    circle(
         adata,
         groupby="random",
         liana_res=liana_res,
@@ -44,13 +44,13 @@ def test_circle_plot(adata: AnnData, liana_res: DataFrame) -> None:
 
 def test_circle_plot_raises(adata: AnnData, liana_res: DataFrame) -> None:
     with pytest.raises(ValueError, match="`groupby` must be provided"):
-        circle_plot(adata, groupby=None, liana_res=liana_res)
+        circle(adata, groupby=None, liana_res=liana_res)
 
     with pytest.raises(ValueError, match="`pivot_mode` must be 'counts' or 'mean'"):
-        circle_plot(adata, groupby="random", liana_res=liana_res, pivot_mode=invalid("neither"))
+        circle(adata, groupby="random", liana_res=liana_res, pivot_mode=invalid("neither"))
 
     with pytest.raises(ValueError, match="`score_key` must be provided"):
-        circle_plot(adata, groupby="random", liana_res=liana_res, pivot_mode="mean", score_key=None)
+        circle(adata, groupby="random", liana_res=liana_res, pivot_mode="mean", score_key=None)
 
 
 def test_get_mask_df(liana_res: DataFrame) -> None:

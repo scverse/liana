@@ -53,7 +53,6 @@ def obsm_to_adata(
     >>> import liana as li
     >>> adata = li.ds.generate_toy_adata()
     >>> pca = li.pp.obsm_to_adata(adata, "X_pca")
-
     """
     if df is None:
         entry = adata.obsm[obsm_key]

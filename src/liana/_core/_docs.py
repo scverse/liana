@@ -24,7 +24,6 @@ class DocstringProcessor:
     ...     '''Says %(greeting)s.'''
     >>> f.__doc__
     'Says hello.'
-
     """
 
     def __init__(self, **params: str) -> None:
@@ -38,7 +37,6 @@ class DocstringProcessor:
         KeyError
             If the docstring references a placeholder that was never registered.
             (docrep only warned, which let typos survive into the rendered docs.)
-
         """
         if obj.__doc__ is None:
             return obj

@@ -128,7 +128,6 @@ def genericMistyData(
     Pass a second object as `extra` to predict the intra view from a different
     modality (e.g. cell-type composition, or pathway activities). Then call the
     object to fit the model -- see :func:`liana.mt.MistyData.__call__`.
-
     """
     # init views
     views = {}
@@ -263,7 +262,6 @@ def lrMistyData(
 
     Fitting this asks, per receptor, which neighbouring ligands predict it -- call the object with ``bypass_intra=True`` so that the receptors are not predicted from each other.
     See :func:`liana.mt.MistyData.__call__`.
-
     """
     # TODO: reduce redundancies in documentation
     if resource is None:

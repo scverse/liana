@@ -71,7 +71,6 @@ def mdata_to_anndata(
     >>> import liana as li
     >>> mdata = li.ds.generate_toy_mdata()
     >>> adata = li.ms.mdata_to_anndata(mdata, x_mod="adata_x", y_mod="adata_y", x_layer="scaled", y_layer="scaled")
-
     """
     xdata = _handle_mod(mdata, x_mod, x_use_raw, x_layer, x_transform, verbose)
     ydata = _handle_mod(mdata, y_mod, y_use_raw, y_layer, y_transform, verbose)

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import weakref
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Hashable, Sequence
 from typing import Literal
 
 import anndata as an
@@ -78,13 +77,7 @@ class MethodMeta:
         Whether it requires permutations
     reference
         Publication reference in Harvard style
-    instances
-        List of instances of this class
-
     """
-
-    # Weak references, so a method instance is not kept alive by this registry.
-    instances: list[weakref.ref[MethodMeta]] = []
 
     # `Method` and `AggregateClass` each define `__call__`; `by_sample` invokes it
     __call__: Callable[..., DataFrame | dict[str, DataFrame] | None]
@@ -102,7 +95,6 @@ class MethodMeta:
         permute: bool,
         reference: str,
     ):
-        self.__class__.instances.append(weakref.ref(self))
         self.method_name = method_name
         self.complex_cols = complex_cols
         self.add_cols = add_cols
@@ -169,7 +161,6 @@ class MethodMeta:
         -------
         A pandas DataFrame with the results and a column sample is stored in `adata.uns[key_added]` if `inplace` is True,
         else the DataFrame is returned.
-
         """
         obs = get_obs(adata)
         if sample_key not in obs:
@@ -223,7 +214,6 @@ class Method(MethodMeta):
     ----------
     method
         Instance of metod metadata class
-
     """
 
     def __init__(self, _method: MethodMeta):
@@ -315,7 +305,6 @@ class Method(MethodMeta):
         >>> import liana as li
         >>> adata = li.ds.generate_toy_adata()
         >>> li.mt.cellphonedb(adata, groupby="bulk_labels", n_perms=100)
-
         """
         if supp_columns is None:
             supp_columns = []
@@ -336,7 +325,7 @@ class Method(MethodMeta):
             base=base,
             de_method=de_method,
             verbose=verbose,
-            _score=self._method,
+            score=self._method,
             n_perms=n_perms,
             seed=seed,
             n_jobs=n_jobs,
@@ -346,13 +335,10 @@ class Method(MethodMeta):
             spatial_kwargs=spatial_kwargs,
             mdata_kwargs=mdata_kwargs,
         )
-        if not isinstance(liana_res, DataFrame):  # only the consensus path returns a dict
-            raise TypeError(f"Expected a DataFrame of results, got {type(liana_res).__name__}.")
-
         if inplace:
             adata.uns[key_added] = liana_res
         return None if inplace else liana_res
 
 
-def _show_methods(methods: list[MethodMeta]) -> DataFrame:
+def _show_methods(methods: Sequence[MethodMeta]) -> DataFrame:
     return concat([method.get_meta() for method in methods])

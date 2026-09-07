@@ -11,7 +11,7 @@ from liana.method.sp._misty._Misty import MistyData
 
 
 @d.dedent
-def target_metrics(
+def misty_target_metrics(
     misty: MistyData | None = None,
     stat: str | None = None,
     target_metrics: pd.DataFrame | None = None,
@@ -62,11 +62,10 @@ def target_metrics(
     >>> adata = adata[:, adata.var_names[:5]].copy()
     >>> misty = li.mt.genericMistyData(intra=adata, bandwidth=200, set_diag=True)
     >>> misty(model=li.mt.sp.LinearModel)
-    >>> p = li.pl.target_metrics(misty, stat="gain_R2")
+    >>> p = li.pl.misty_target_metrics(misty, stat="gain_R2")
 
     Pass `aggregate_fn` (e.g. `numpy.mean`) to summarise a masked model's
     per-group rows into boxplots.
-
     """
     if target_metrics is not None:
         target_metrics = target_metrics.copy()
@@ -105,7 +104,7 @@ def target_metrics(
 
 
 @d.dedent
-def contributions(
+def misty_contributions(
     misty: MistyData | None = None,
     target_metrics: pd.DataFrame | None = None,
     view_names: list[str] | None = None,
@@ -148,8 +147,7 @@ def contributions(
     >>> adata = adata[:, adata.var_names[:5]].copy()
     >>> misty = li.mt.genericMistyData(intra=adata, bandwidth=200, set_diag=True)
     >>> misty(model=li.mt.sp.LinearModel)
-    >>> p = li.pl.contributions(misty)
-
+    >>> p = li.pl.misty_contributions(misty)
     """
     if target_metrics is not None:
         target_metrics = target_metrics.copy()
@@ -193,7 +191,7 @@ def contributions(
 
 
 @d.dedent
-def interactions(
+def misty_interactions(
     misty: MistyData | None = None,
     interactions: pd.DataFrame | None = None,
     view: str | None = None,
@@ -244,11 +242,10 @@ def interactions(
     >>> adata = adata[:, adata.var_names[:5]].copy()
     >>> misty = li.mt.genericMistyData(intra=adata, bandwidth=200, set_diag=True)
     >>> misty(model=li.mt.sp.LinearModel)
-    >>> p = li.pl.interactions(misty, view="intra")
+    >>> p = li.pl.misty_interactions(misty, view="intra")
 
     `misty.view_names` lists the views available -- here `'intra'`, `'juxta'` and
     `'para'`.
-
     """
     if interactions is not None:
         interactions = interactions.copy()

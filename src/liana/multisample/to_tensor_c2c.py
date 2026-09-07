@@ -84,7 +84,6 @@ def to_tensor_c2c(
     >>> tensor = li.ms.to_tensor_c2c(adata, sample_key="sample", score_key="specificity_rank")
 
     The tensor can then be decomposed with Tensor-cell2cell.
-
     """
     # check if cell2cell is installed
     c2c = _check_if_installed("cell2cell")

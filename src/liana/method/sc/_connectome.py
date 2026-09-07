@@ -18,7 +18,6 @@ def _connectome_score(x: DataFrame) -> tuple[NDArray[np.floating], NDArray[np.fl
     Returns
     -------
     tuple(expr_prod, scaled_weight)
-
     """
     # magnitude
     expr_prod = x["ligand_means"].to_numpy() * x["receptor_means"].to_numpy()

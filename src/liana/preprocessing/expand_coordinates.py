@@ -50,7 +50,6 @@ def expand_coordinates(
     >>> rng = np.random.default_rng(0)
     >>> adata.obs["sample"] = rng.choice(["A", "B", "C", "D"], size=adata.n_obs)
     >>> expanded = li.pp.expand_coordinates(adata, sample_key="sample")
-
     """
     if sample_key not in get_obs(adata):
         raise ValueError(f"`sample_key` '{sample_key}' was not found in `adata.obs`.")

@@ -2,14 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from functools import partial
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
+from warnings import warn
 
+import numba as nb
 import numpy as np
 import pandas as pd
 from anndata import AnnData
 from numpy.typing import ArrayLike, NDArray
 from scipy.sparse import sparray, spmatrix
 from scipy.spatial import cKDTree
+from scverse_misc import Deprecation
 from tqdm import tqdm
 
 from liana._core._common import _logg
@@ -23,10 +26,20 @@ from liana._core._types import MatrixLike, get_obs, get_x
 from liana.method.sp._utils import _add_complexes_to_var
 from liana.resource.select_resource import _handle_resource
 
+if TYPE_CHECKING:
+    prange = range
+else:
+    prange = nb.prange
+
+_PAIR_CHUNK_DEPRECATION = Deprecation(
+    "2.1", "The weighted numerator no longer holds per-chunk temporaries, so there is nothing to tune."
+)
+"""Why `lric`'s `pair_chunk` no longer does anything."""
+
+
 type Transform = Callable[[np.ndarray], np.ndarray]
 """Rescales an expression matrix before ligand/receptor weights are formed."""
 
-_EDGE_BLOCK_ELEMS = 1 << 22
 _MIN_CELLS_FRAC = 0.01
 
 # ── helpers ───────────────────────────────────────────────────────────
@@ -197,6 +210,55 @@ def _prop_mask(mat: np.ndarray, prop_snd: np.ndarray, prop_rcv: np.ndarray, min_
     return mat
 
 
+@nb.njit(cache=True)
+def _bin_edges(
+    I: np.ndarray,
+    J: np.ndarray,
+    D: np.ndarray,
+    radii_inner: np.ndarray,
+    radii_outer: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Drop self-pairs and pairs outside every tile, and bin what is left.
+
+    One pass over the pair list, counting first and filling second, so that the
+    intermediate masks the equivalent chain of numpy expressions would allocate over
+    tens of millions of pairs never exist.
+    """
+    n_bins = radii_inner.size
+    n_edges = I.size
+
+    kept = 0
+    for e in range(n_edges):
+        if I[e] == J[e]:
+            continue
+        d = np.float64(D[e])
+        b = 0
+        while b < n_bins and radii_outer[b] <= d:
+            b += 1
+        if b < n_bins and d >= radii_inner[b]:
+            kept += 1
+
+    out_i = np.empty(kept, dtype=I.dtype)
+    out_j = np.empty(kept, dtype=J.dtype)
+    out_bin = np.empty(kept, dtype=np.int64)
+
+    at = 0
+    for e in range(n_edges):
+        if I[e] == J[e]:
+            continue
+        d = np.float64(D[e])
+        b = 0
+        while b < n_bins and radii_outer[b] <= d:
+            b += 1
+        if b < n_bins and d >= radii_inner[b]:
+            out_i[at] = I[e]
+            out_j[at] = J[e]
+            out_bin[at] = b
+            at += 1
+
+    return out_i, out_j, out_bin
+
+
 def _support_edge_list(
     tree: cKDTree, radii_inner: np.ndarray, radii_outer: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -205,15 +267,15 @@ def _support_edge_list(
     Self-pairs are excluded, and pairs are binned on the half-open ``[inner, outer)`` convention.
     Each pair is assigned to exactly one bin, so the bins must be disjoint tiles for the counts to be complete.
     """
-    n_bins = len(radii_inner)
     spdm = tree.sparse_distance_matrix(tree, max_distance=float(radii_outer[-1]), output_type="coo_matrix")
-    I, J, D = spdm.row, spdm.col, spdm.data.astype(np.float32)
-    m = I != J  # remove self-pairs
-    I, J, D = I[m], J[m], D[m]
-    bin_idx = np.searchsorted(radii_outer, D, side="right")  # map distances to bins
-    clipped = np.minimum(bin_idx, n_bins - 1)
-    valid = (bin_idx < n_bins) & (D >= radii_inner[clipped])
-    return I[valid], J[valid], bin_idx[valid]
+
+    return _bin_edges(
+        spdm.row,
+        spdm.col,
+        spdm.data.astype(np.float32),
+        np.asarray(radii_inner, dtype=np.float64),
+        np.asarray(radii_outer, dtype=np.float64),
+    )
 
 
 class _Support(NamedTuple):
@@ -254,20 +316,57 @@ def _expected_pairs(n_S: int, n_R: int, N: int, T: np.ndarray) -> np.ndarray:
     return n_S * n_R / (N * (N - 1)) * T
 
 
-def _edge_group_bounds(group_key_sorted: np.ndarray, n_groups: int) -> np.ndarray:
-    """Start offsets of every group in a group-key-sorted edge list.
+def _group_edges(
+    group_key: np.ndarray,
+    I: np.ndarray,
+    J: np.ndarray,
+    n_groups: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Sort the edge list by ``group_key``, so each group is a contiguous slice.
 
-    ``bounds[g]:bounds[g + 1]`` is the (possibly empty) contiguous slice of edges
-    belonging to group ``g``; ``bounds`` has length ``n_groups + 1``.
+    The counting pass indexes an array of ``n_groups`` by the key and numba does not
+    bounds-check, so a key outside that range would corrupt memory rather than raise.
+    One pass over the keys up front is cheap next to the sort it guards.
     """
-    return np.searchsorted(group_key_sorted, np.arange(n_groups + 1), side="left")
+    if group_key.size and (group_key.min() < 0 or group_key.max() >= n_groups):
+        raise ValueError(f"`group_key` must lie in [0, {n_groups}), got [{group_key.min()}, {group_key.max()}].")
+
+    return _counting_sort_edges(group_key, I, J, n_groups)
 
 
-def _group_edges(sup: _Support, group_key: np.ndarray, n_groups: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Sort the edge list by ``group_key``, so each group is a contiguous slice."""
-    order = np.argsort(group_key, kind="stable")
-    bounds = _edge_group_bounds(group_key[order], n_groups)
-    return sup.I[order], sup.J[order], bounds
+@nb.njit(cache=True)
+def _counting_sort_edges(
+    group_key: np.ndarray,
+    I: np.ndarray,
+    J: np.ndarray,
+    n_groups: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Place every edge in its group in one pass.
+
+    The key is a cell-type pair crossed with a radius tile, so it spans a few hundred
+    values over tens of millions of edges -- a counting sort places every edge in one
+    pass, where a comparison sort pays a factor of log(n_edges) for the same order.
+    Ascending traversal keeps ties in input order, so the result matches a stable sort
+    exactly, and the group offsets fall out of the histogram rather than a second search.
+    """
+    bounds = np.zeros(n_groups + 1, dtype=np.int64)
+    for e in range(group_key.size):
+        bounds[group_key[e] + 1] += 1
+    for g in range(n_groups):
+        bounds[g + 1] += bounds[g]
+
+    I_sorted = np.empty(I.size, dtype=I.dtype)
+    J_sorted = np.empty(J.size, dtype=J.dtype)
+
+    cursor = bounds[:n_groups].copy()
+    for e in range(group_key.size):
+        g = group_key[e]
+        at = cursor[g]
+        I_sorted[at] = I[e]
+        J_sorted[at] = J[e]
+        cursor[g] = at + 1
+
+    return I_sorted, J_sorted, bounds
 
 
 def _select_pairs(
@@ -301,39 +400,31 @@ def _select_pairs(
     return kept
 
 
-# weighted ligand–receptor sums for grouped edge segments
-# g -> group, one radius bin for a fixed sender→receiver cell-type pair.
-# p -> ligand–receptor pair.
-# i→j is a directed spatial edge.
+@nb.njit(parallel=True, cache=True)
 def _segment_weighted_sums(
     I_sorted: np.ndarray,
     J_sorted: np.ndarray,
     bounds: np.ndarray,
     WL: np.ndarray,
     WR: np.ndarray,
-    pair_chunk: int,
 ) -> np.ndarray:
     """``out[g, p] = sum_{(i, j) in group g} WL[i, p] * WR[j, p]``, shape ``(n_groups, n_pairs)``.
 
-    Edges must already be sorted by group key (with ``bounds`` from
-    :func:`_edge_group_bounds`) so that each group occupies a contiguous slice.
+    ``g`` is a group -- one radius bin for a fixed sender-to-receiver cell-type pair -- and ``p`` a ligand-receptor pair.
+    Edges must already be sorted by group key (with ``bounds`` from :func:`_group_edges`) so that each group occupies a contiguous slice.
+    Accumulating edge by edge keeps the whole reduction out of temporaries, so nothing has to be tiled to bound memory.
     """
-    n_groups = len(bounds) - 1
+    n_groups = bounds.size - 1
     n_pairs = WL.shape[1]
     out = np.zeros((n_groups, n_pairs), dtype=np.float64)
-    for p0 in range(0, n_pairs, pair_chunk):
-        p1 = min(p0 + pair_chunk, n_pairs)
-        WLc, WRc = WL[:, p0:p1], WR[:, p0:p1]
-        # cap the gathered block so peak memory is bounded by _EDGE_BLOCK_ELEMS
-        edge_block = max(1, _EDGE_BLOCK_ELEMS // (p1 - p0))
-        for g in range(n_groups):
-            lo, hi = int(bounds[g]), int(bounds[g + 1])
-            if hi <= lo:
-                continue
-            acc = out[g, p0:p1]
-            for e0 in range(lo, hi, edge_block):
-                e1 = min(e0 + edge_block, hi)
-                acc += (WLc[I_sorted[e0:e1]] * WRc[J_sorted[e0:e1]]).sum(axis=0, dtype=np.float64)
+
+    for g in prange(n_groups):
+        for edge in range(bounds[g], bounds[g + 1]):
+            i = I_sorted[edge]
+            j = J_sorted[edge]
+            for p in range(n_pairs):
+                out[g, p] += WL[i, p] * WR[j, p]
+
     return out
 
 
@@ -565,7 +656,6 @@ class LRIC:
 
     LRIC builds on the cross pair-correlation function; see
     (:class:`CrossPCF`).
-
     """
 
     @d.dedent
@@ -591,7 +681,7 @@ class LRIC:
         transform_fn: Callable[[np.ndarray], np.ndarray] | None = None,
         use_raw: bool = V.use_raw,
         layer: str | None = V.layer,
-        pair_chunk: int = 256,
+        pair_chunk: int | None = None,
         key_added: str = "lric",
         inplace: bool = V.inplace,
         verbose: bool = V.verbose,
@@ -661,9 +751,9 @@ class LRIC:
         %(use_raw)s
         %(layer)s
         pair_chunk
-            Number of LR pairs processed per chunk when accumulating the
-            weighted numerator; lower to reduce peak memory on very large
-            resources.
+            Deprecated since 2.1 and ignored. The weighted numerator is now
+            accumulated without materialising per-chunk temporaries, so there is
+            nothing to tune.
         %(key_added)s
         %(inplace)s
         %(verbose)s
@@ -738,6 +828,13 @@ class LRIC:
 
         assert_covered(np.union1d(resource["ligand"], resource["receptor"]), adata.var_names, verbose=verbose)
 
+        if pair_chunk is not None:
+            warn(
+                f"The argument pair_chunk is deprecated and will be removed in the future. {_PAIR_CHUNK_DEPRECATION}",
+                FutureWarning,
+                stacklevel=2,
+            )
+
         sup = _build_support(adata, spatial_key, max_radius, radius_step, annulus_steps, extend_first_annulus)
         if groupby is None:
             res = self._agnostic(
@@ -747,7 +844,6 @@ class LRIC:
                 nz_prop=nz_prop,
                 lr_sep=lr_sep,
                 transform_fn=transform_fn,
-                pair_chunk=pair_chunk,
                 verbose=verbose,
             )
         else:
@@ -760,7 +856,6 @@ class LRIC:
                 expr_prop=expr_prop,
                 lr_sep=lr_sep,
                 transform_fn=transform_fn,
-                pair_chunk=pair_chunk,
                 verbose=verbose,
             )
 
@@ -777,7 +872,6 @@ class LRIC:
         nz_prop: float,
         lr_sep: str,
         transform_fn: Transform | None,
-        pair_chunk: int,
         verbose: bool,
     ) -> pd.DataFrame:
         """Cell-type-agnostic LRIC across all cells (self-pairs excluded).
@@ -792,7 +886,6 @@ class LRIC:
         actual self-pairs are excluded from the edge set. Reduces exactly to
         ``CrossPCF``'s directed curve when weights are one-hot type
         indicators.
-
         """
         _logg("Running cell-type-agnostic LRIC.", verbose=verbose)
 
@@ -801,8 +894,8 @@ class LRIC:
         # numerator and denominator both come off the SAME edge list on disjoint
         # fine tiles, then get rolled up into the (possibly overlapping) output
         # annuli -- so every pair is counted identically on both sides
-        I_sorted, J_sorted, bounds = _group_edges(sup, sup.bin_idx, sup.n_fine)
-        num = sup.roll(_segment_weighted_sums(I_sorted, J_sorted, bounds, WL, WR, pair_chunk))
+        I_sorted, J_sorted, bounds = _group_edges(sup.bin_idx, sup.I, sup.J, sup.n_fine)
+        num = sup.roll(_segment_weighted_sums(I_sorted, J_sorted, bounds, WL, WR))
 
         # closed-form null mean: T(b) * E[wL(i) wR(j)] over random distinct pairs
         S_L, S_R, cross = WL.sum(0), WR.sum(0), (WL * WR).sum(0)
@@ -834,7 +927,6 @@ class LRIC:
         expr_prop: float,
         lr_sep: str,
         transform_fn: Transform | None,
-        pair_chunk: int,
         verbose: bool,
     ) -> pd.DataFrame:
         """Cell-type pairwise ("ct") LRIC under the conditional (within-type) null.
@@ -889,7 +981,7 @@ class LRIC:
         group_key += type_code[sup.J]
         group_key *= n_fine
         np.add(group_key, sup.bin_idx, out=group_key, casting="unsafe")
-        I_sorted, J_sorted, bounds = _group_edges(sup, group_key, n_types * n_types * n_fine)
+        I_sorted, J_sorted, bounds = _group_edges(group_key, sup.I, sup.J, n_types * n_types * n_fine)
         del group_key
 
         # Per-type expressing proportions -- a mean over a boolean -- computed once
@@ -908,7 +1000,7 @@ class LRIC:
 
             g0 = (si * n_types + ri) * n_fine
             grp = bounds[g0 : g0 + n_fine + 1]
-            Num_SR = sup.roll(_segment_weighted_sums(I_sorted, J_sorted, grp, WL, WR, pair_chunk))
+            Num_SR = sup.roll(_segment_weighted_sums(I_sorted, J_sorted, grp, WL, WR))
             # edges per group == observed ordered S->R pair count per tile
             T_SR = sup.roll(np.diff(grp).astype(np.float64))
 
