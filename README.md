@@ -1,7 +1,7 @@
 # LIANA+: an all-in-one cell-cell communication framework <img src="https://raw.githubusercontent.com/scverse/liana/main/docs/_static/logo.png" align="right" height="125">
 
 <!-- badges: start -->
-[![main](https://github.com/scverse/liana/actions/workflows/test.yml/badge.svg)](https://github.com/scverse/liana/actions)
+[![main](https://github.com/scverse/liana/actions/workflows/test.yaml/badge.svg)](https://github.com/scverse/liana/actions)
 [![GitHub issues](https://img.shields.io/github/issues/scverse/liana.svg)](https://github.com/scverse/liana/issues/)
 [![Documentation Status](https://readthedocs.org/projects/liana-py/badge/?version=latest)](https://liana-py.readthedocs.io/en/latest/?badge=latest)
 [![codecov](https://codecov.io/gh/scverse/liana/graph/badge.svg?token=2HvdhecFQU)](https://codecov.io/gh/scverse/liana)
@@ -145,7 +145,7 @@ Please also consider citing any of the methods and/or resources that were partic
 [uv]: https://github.com/astral-sh/uv
 [scverse discourse]: https://discourse.scverse.org/
 [issue tracker]: https://github.com/scverse/liana/issues
-[tests]: https://github.com/scverse/liana/actions/workflows/test.yml
+[tests]: https://github.com/scverse/liana/actions/workflows/test.yaml
 [documentation]: https://liana-py.readthedocs.io
 [changelog]: https://liana-py.readthedocs.io/en/latest/changelog.html
 [api documentation]: https://liana-py.readthedocs.io/en/latest/api.html
