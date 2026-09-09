@@ -21,8 +21,9 @@ if TYPE_CHECKING:
 @d.dedent
 def to_tensor_c2c(
     adata: AnnData | None = None,
-    sample_key: str | None = None,
-    score_key: str | None = None,
+    *,
+    sample_key: str,
+    score_key: str,
     liana_res: DataFrame | None = None,
     source_key: str = P.source,
     target_key: str = P.target,
@@ -42,7 +43,8 @@ def to_tensor_c2c(
     ----------
     %(adata)s
     %(sample_key)s
-    %(score_key)s
+    score_key
+        Column name of the score in `liana_res` to build the tensor from.
     liana_res
         A dataframe with the LIANA results. If None, it will be taken from `adata.uns[uns_key]`.
     %(source_key)s
@@ -85,11 +87,6 @@ def to_tensor_c2c(
     """
     # check if cell2cell is installed
     c2c = _check_if_installed("cell2cell")
-
-    if sample_key is None:
-        raise ValueError("`sample_key` must be provided!")
-    if score_key is None:
-        raise ValueError("`score_key` must be provided!")
 
     res = _get_liana_res(adata, liana_res, uns_key)
 

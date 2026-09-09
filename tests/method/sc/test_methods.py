@@ -194,6 +194,14 @@ def test_methods_by_sample(toy_adata: AnnData) -> None:
     assert lr_by_sample.shape == (10836, 15)
 
 
+def test_methods_by_sample_not_inplace(toy_adata: AnnData) -> None:
+    lr_by_sample = logfc.by_sample(toy_adata, groupby="bulk_labels", sample_key="sample", inplace=False)
+
+    assert lr_by_sample is not None
+    assert "sample" in lr_by_sample.columns
+    assert "liana_res" not in toy_adata.uns
+
+
 def test_methods_on_mdata(toy_mdata: MuData) -> None:
     from itertools import product
 
@@ -216,7 +224,7 @@ def test_methods_on_mdata(toy_mdata: MuData) -> None:
         ),
     )
 
-    assert toy_mdata.uns["liana_res"].shape == (132, 12)
+    assert toy_mdata.uns["liana_res"].shape == (144, 12)
 
 
 def test_wrong_resource(toy_adata: AnnData) -> None:

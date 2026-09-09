@@ -9,8 +9,9 @@ from pytest import raises
 from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import pdist, squareform
-from tests._helpers import as_frame, get_obs, invalid
+from tests._helpers import as_frame, get_csr, get_obs, invalid
 
+from liana._core._constants import DefaultValues as V
 from liana.datasets import generate_toy_spatial
 from liana.datasets._sample_resource import sample_resource
 from liana.method.sp._LRIC import (
@@ -117,15 +118,15 @@ def cross_pcf_pair(adata: AnnData) -> pd.DataFrame:
 @pytest.fixture(scope="module")
 def lric_agnostic(adata: AnnData, resource: pd.DataFrame) -> pd.DataFrame:
     """Default agnostic LRIC, computed once and shared as the reference the
-    lr_sep / expr_prop / transform_fn variants are each compared against."""
-    return as_frame(lric(adata, resource=resource, inplace=False, **_KWARGS))
+    lr_sep / nz_prop / transform_fn variants are each compared against."""
+    return as_frame(lric(adata, resource=resource, nz_prop=0, inplace=False, **_KWARGS))
 
 
 @pytest.fixture(scope="module")
 def lric_pairwise(adata: AnnData, resource: pd.DataFrame) -> pd.DataFrame:
     """Default pairwise LRIC (all directed cell-type pairs), computed once and
     shared as the reference for the decomposition and min_cells variants."""
-    return as_frame(lric(adata, resource=resource, groupby="cell_type", inplace=False, **_KWARGS))
+    return as_frame(lric(adata, resource=resource, groupby="cell_type", expr_prop=0, inplace=False, **_KWARGS))
 
 
 # ── helpers: pure math / small synthetic inputs ────────────────────────────
@@ -432,22 +433,34 @@ def test_lric_agnostic_reduces_to_cross_pcf(adata: AnnData) -> None:
     )
 
 
-def test_lric_agnostic_expr_prop(adata: AnnData, resource: pd.DataFrame, lric_agnostic: pd.DataFrame) -> None:
+def test_lric_agnostic_nz_prop(adata: AnnData, resource: pd.DataFrame, lric_agnostic: pd.DataFrame) -> None:
     n = adata.n_obs
     base = lric_agnostic
 
-    result = as_frame(lric(adata, resource=resource, expr_prop=1.1, inplace=False, **_KWARGS))
+    result = as_frame(lric(adata, resource=resource, nz_prop=1.1, inplace=False, **_KWARGS))
     assert result["g"].isna().all(), "all pairs NaN when threshold exceeds any possible proportion"
 
-    result0 = as_frame(lric(adata, resource=resource, expr_prop=0, inplace=False, **_KWARGS))
-    np.testing.assert_array_equal(result0["g"], base["g"])  # default = no-op
+    result0 = as_frame(lric(adata, resource=resource, nz_prop=0, inplace=False, **_KWARGS))
+    np.testing.assert_array_equal(result0["g"], base["g"])  # 0 = no-op
+
+    # the default (`V.nz_prop`) masks: a ligand left non-zero in fewer than 5% of
+    # ALL cells comes out NaN, while its pair survives at `nz_prop=0`
+    sparse = adata.copy()
+    ligand = str(resource["ligand"].iloc[0])
+    X = _to_dense(get_csr(sparse))
+    X[int(V.nz_prop * n / 2) :, sparse.var_names.get_loc(ligand)] = 0
+    sparse.X = csr_matrix(X)
+    default = as_frame(lric(sparse, resource=resource, inplace=False, **_KWARGS))
+    assert default.loc[default["ligand_complex"] == ligand, "g"].isna().all()
+    unmasked = as_frame(lric(sparse, resource=resource, nz_prop=0, inplace=False, **_KWARGS))
+    assert unmasked.loc[unmasked["ligand_complex"] == ligand, "g"].notna().any()
 
     # partial threshold (equivalent to the old min_expressing=100 out of `n` cells):
     # masking is per-pair and leaves kept pairs untouched
-    partial = as_frame(lric(adata, resource=resource, expr_prop=100 / n, inplace=False, **_KWARGS))
-    masked = partial.groupby("interaction", observed=True)["g"].apply(lambda s: s.isna().all())
-    assert masked.any() and not masked.all(), "expected a mix of masked and kept pairs"
-    keep = ~partial["interaction"].isin(masked.index[masked])
+    partial = as_frame(lric(adata, resource=resource, nz_prop=100 / n, inplace=False, **_KWARGS))
+    masked_partial = partial.groupby("interaction", observed=True)["g"].apply(lambda s: s.isna().all())
+    assert masked_partial.any() and not masked_partial.all(), "expected a mix of masked and kept pairs"
+    keep = ~partial["interaction"].isin(masked_partial.index[masked_partial])
     np.testing.assert_array_equal(partial["g"][keep], base["g"][keep])
 
 

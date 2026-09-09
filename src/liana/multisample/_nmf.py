@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import plotnine as p9
 from anndata import AnnData
 from sklearn.decomposition import NMF
 from tqdm import tqdm
@@ -68,7 +67,7 @@ def nmf(
     >>> li.ms.nmf(lrdata, n_components=3, random_state=0)
 
     Leaving `n_components` as `None` instead estimates the rank with
-    :func:`liana.ms.estimate_elbow` and draws the elbow plot.
+    :func:`liana.ms.estimate_elbow`; inspect the curve with :func:`liana.pl.elbow`.
 
     Read the factors out with :func:`liana.ms.get_factor_scores` and
     :func:`liana.ms.get_variable_loadings`.
@@ -85,7 +84,6 @@ def nmf(
 
     if n_components is None:
         errors, n_components = estimate_elbow(X, k_range=k_range, verbose=verbose, **kwargs)
-        _plot_elbow(errors, n_components)
     else:
         errors, n_components = None, n_components
 
@@ -172,21 +170,3 @@ def _calculate_error(X: MatrixLike, n_components: int, **kwargs: object) -> floa
 
     Xhat = np.dot(W, H)
     return float(np.mean(np.abs(X - Xhat)))
-
-
-def _plot_elbow(
-    errors: pd.DataFrame,
-    n_components: int | None,
-    x: str = "k",
-    y: str = "error",
-) -> None:
-    p = (
-        p9.ggplot(errors, p9.aes(x=x, y=y))
-        + p9.geom_line()
-        + p9.geom_point()
-        + p9.theme_bw()
-        + p9.scale_x_continuous(breaks=errors[x].to_list())
-        + p9.labs(x="Component number (k)", y="Reconstruction error")
-        + p9.geom_vline(xintercept=n_components, linetype="dashed", color="red")
-    )
-    p.draw()

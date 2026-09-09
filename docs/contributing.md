@@ -258,7 +258,7 @@ This catches packaging problems (missing metadata, broken wheels) before release
 
 ### Updating the version number
 
-Before making a release, you need to update the version number in the `pyproject.toml` file.
+The version is derived from git tags by [hatch-vcs][]; there is no version string to edit in the repository.
 Please adhere to [Semantic Versioning][semver], in brief
 
 > Given a version number MAJOR.MINOR.PATCH, increment the:
@@ -269,11 +269,12 @@ Please adhere to [Semantic Versioning][semver], in brief
 >
 > Additional labels for pre-release and build metadata are available as extensions to the MAJOR.MINOR.PATCH format.
 
-Once you are done, commit and push your changes and navigate to the "Releases" page of this project on GitHub.
-Specify `vX.X.X` as a tag name and create a release.
+To release, navigate to the "Releases" page of this project on GitHub, specify `vX.Y.Z` as a tag name and create a release.
 For more information, see [managing GitHub releases][].
-This will automatically create a git tag and trigger a Github workflow that creates a release on [PyPI][].
+This creates the git tag and triggers a Github workflow that builds the package with that version and publishes it on [PyPI][].
+Between tags, builds carry a development version such as `2.0.1.devN+g<sha>`; an editable install reports the version from install time, so reinstall after tagging.
 
+[hatch-vcs]: https://github.com/ofek/hatch-vcs
 [semver]: https://semver.org/
 [managing GitHub releases]: https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository
 [pypi]: https://pypi.org/

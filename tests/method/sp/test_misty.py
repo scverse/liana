@@ -5,11 +5,13 @@ import pandas as pd
 import pytest
 import scanpy as sc
 from anndata import AnnData
+from scipy import sparse
 from tests._helpers import as_anndata
 
 from liana.method import MistyData
 from liana.method.sp._misty._misty_constructs import genericMistyData, lrMistyData
 from liana.method.sp._misty._single_view_models import LinearModel, RandomForestModel, RobustLinearModel
+from liana.preprocessing import spatial_neighbors
 
 
 @pytest.fixture
@@ -176,4 +178,18 @@ def test_misty_nonaligned(toy_spatial: AnnData) -> None:
         enforce_obs=False,  # NOTE: This is the key parameter
         verbose=True,
     )
+    misty(model=LinearModel, k_cv=3)
+
+
+def test_misty_nonaligned_sparse(toy_spatial: AnnData) -> None:
+    """`spatial_neighbors(reference=...)` writes sparse connectivities to .obsm; they must weight fine."""
+    intra = toy_spatial[:, :10].copy()
+    intra.var.index = "x" + intra.var.index
+    para = toy_spatial[: int(toy_spatial.n_obs * 0.9), -10:].copy()
+    para.var.index = "y" + para.var.index
+    spatial_neighbors(para, bandwidth=200, cutoff=0.1, set_diag=False, reference=np.asarray(intra.obsm["spatial"]))
+    assert sparse.issparse(para.obsm["spatial_connectivities"])
+
+    misty = MistyData({"intra": intra, "ydata": para}, enforce_obs=False)
+    assert misty.get_weighted_matrix("ydata").shape == (intra.n_obs, para.n_vars)
     misty(model=LinearModel, k_cv=3)

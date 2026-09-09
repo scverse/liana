@@ -1,7 +1,7 @@
 # LIANA+: an all-in-one cell-cell communication framework <img src="https://raw.githubusercontent.com/scverse/liana/main/docs/_static/logo.png" align="right" height="125">
 
 <!-- badges: start -->
-[![main](https://github.com/scverse/liana/actions/workflows/test.yml/badge.svg)](https://github.com/scverse/liana/actions)
+[![main](https://github.com/scverse/liana/actions/workflows/test.yaml/badge.svg)](https://github.com/scverse/liana/actions)
 [![GitHub issues](https://img.shields.io/github/issues/scverse/liana.svg)](https://github.com/scverse/liana/issues/)
 [![Documentation Status](https://readthedocs.org/projects/liana-py/badge/?version=latest)](https://liana-py.readthedocs.io/en/latest/?badge=latest)
 [![codecov](https://codecov.io/gh/scverse/liana/graph/badge.svg?token=2HvdhecFQU)](https://codecov.io/gh/scverse/liana)
@@ -18,6 +18,16 @@ We welcome suggestions, ideas, and contributions! Please do not hesitate to cont
 
 ## Vignettes
 A set of extensive vignettes can be found in the [LIANA+ documentation](https://liana-py.readthedocs.io/en/latest/).
+
+## Claude Code Skill
+
+LIANA+ provides an [Agent Skill](https://docs.claude.com/en/docs/claude-code/skills) for [Claude Code](https://claude.com/claude-code) that guides the agent to use the library correctly: which method fits which data, where results land, and the defaults that trip users up. Install it once into your personal skills directory:
+
+```bash
+liana-install-skills
+```
+
+The command comes with `pip install liana`, so run it from any Python environment that has liana. It copies the skill to `~/.claude/skills/liana/`, where Claude Code picks it up automatically in every project and directory; type `/skills` in Claude Code to confirm `liana` is listed. After upgrading liana, refresh the copy with `liana-install-skills --force`. Then ask Claude Code for liana tasks in plain words ("which cell types signal to which in this Xenium slide", "compare interactions between conditions", "run this on mouse") and the skill is consulted automatically.
 
 ## Decision Tree
 
@@ -96,6 +106,7 @@ flowchart TD
 
 This tree is a guide rather than an exhaustive map: the methods are modular and can be adapted or combined across data types and questions, and all of them typically build on curated prior knowledge (see the [prior knowledge](https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/prior_knowledge.html) tutorial for working with ligand–receptor and other resources).
 
+
 ## API
 For further information please check LIANA's [API documentation](https://liana-py.readthedocs.io/en/latest/api.html).
 
@@ -134,7 +145,7 @@ Please also consider citing any of the methods and/or resources that were partic
 [uv]: https://github.com/astral-sh/uv
 [scverse discourse]: https://discourse.scverse.org/
 [issue tracker]: https://github.com/scverse/liana/issues
-[tests]: https://github.com/scverse/liana/actions/workflows/test.yml
+[tests]: https://github.com/scverse/liana/actions/workflows/test.yaml
 [documentation]: https://liana-py.readthedocs.io
 [changelog]: https://liana-py.readthedocs.io/en/latest/changelog.html
 [api documentation]: https://liana-py.readthedocs.io/en/latest/api.html

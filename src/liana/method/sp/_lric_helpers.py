@@ -58,7 +58,7 @@ def get_lric_auc(
         the integral.
     min_bins
         Drop interactions with fewer than this many finite bins in the window
-        (a support gate for ``expr_prop``-masked / degenerate interactions).
+        (a support gate for proportion-masked / degenerate interactions).
 
     Returns
     -------
@@ -119,7 +119,7 @@ def get_lric_auc(
         else:
             msg = (
                 f"every interaction has <{min_bins} finite g(r) bins in-window "
-                "(expr_prop masking / sparse geometry) — lower min_bins or expr_prop"
+                "(nz_prop/expr_prop masking / sparse geometry) — lower min_bins or the threshold"
             )
         _logg(msg, level="warn", verbose=True)
     out = keys[ok].to_frame(index=False)

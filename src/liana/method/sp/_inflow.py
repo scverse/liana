@@ -47,7 +47,7 @@ class SpatialInflow:
         resource_name: str | None = None,
         resource: pd.DataFrame | None = V.resource,
         interactions: list[tuple[str, str]] | None = V.interactions,
-        nz_prop: float = 0.001,
+        nz_prop: float = V.nz_prop,
         connectivity_key: str = K.connectivity_key,
         complex_sep: str | None = V.complex_sep,
         x_transform: MatrixTransform | None = None,
@@ -77,20 +77,20 @@ class SpatialInflow:
         %(connectivity_key)s
         %(layer)s
         %(use_raw)s
-        nz_prop: float
-            Minimum proportion of non-zero values for each features. For example, if working with gene expression data,
-            this would be the proportion of cells expressing a gene. Both features must have a proportion greater than
-            `nz_prop` to be considered in the analysis.
+        %(nz_prop)s
+            Both features must pass the threshold to be considered in the analysis.
         complex_sep: str
             Separator to use for complex names.
         xy_sep: str
             Separator to use for interaction names.
         x_transform
             Function used to transform the source-ligand values.
-            If None, no transformation is applied.
+            If None, no transformation is applied. Whether a transformation helps is data-dependent;
+            :func:`liana.pp.zi_minmax` is the usual choice.
         y_transform
             Function used to transform the receptor values.
-            If None, no transformation is applied.
+            If None, no transformation is applied. Whether a transformation helps is data-dependent;
+            :func:`liana.pp.zi_minmax` is the usual choice.
         %(verbose)s
 
         **kwargs : dict, optional
@@ -274,7 +274,7 @@ class SpatialInflow:
         # Horizontally stack to simulate (n_cells, n_celltypes * n_ligands)
         stacked = csr_matrix(hstack(ls_list))  # shape: (n_cells, k * m)
 
-        # Min-max transform the ligand * celltype data & apply spatial weighting
+        # Optionally transform the ligand * celltype data (no-op if `x_transform` is None)
         ls = self._transform(stacked, x_transform, **x_transform_kwargs)
 
         wls = w.dot(ls)

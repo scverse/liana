@@ -128,6 +128,7 @@ class AggregateClass(MethodMeta):
         consensus_opts
             Strategies to aggregate interactions across methods.
             Default is None - i.e. ['Specificity', 'Magnitude'] and both specificity and magnitude are aggregated.
+            Methods whose score was not computed (e.g. permutation p-values when `n_perms` is None) are skipped.
         %(return_all_lrs)s
         %(key_added)s
         %(use_raw)s

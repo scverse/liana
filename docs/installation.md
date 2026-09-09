@@ -67,3 +67,7 @@ uv sync --all-extras
 ```
 
 The {doc}`contributing guide <contributing>` describes the environments, the test matrix and the docs build.
+
+## Claude Code Skill
+
+LIANA+ bundles an Agent Skill for Claude Code. After installing liana, run `liana-install-skills` once to copy it to `~/.claude/skills/liana/`; Claude Code picks it up automatically in every project (type `/skills` to confirm) and consults it for liana tasks. Refresh the copy with `liana-install-skills --force` after upgrading liana.

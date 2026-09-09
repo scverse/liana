@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Hashable, Sequence
 from typing import Literal
 
 import anndata as an
@@ -175,7 +175,7 @@ class MethodMeta:
 
         samples = obs[sample_key].cat.categories
 
-        adata.uns[key_added] = {}
+        by_sample: dict[Hashable, DataFrame] = {}
 
         progress_bar = tqdm(samples, disable=not show_progress)
         for sample in progress_bar:
@@ -188,10 +188,12 @@ class MethodMeta:
             temp = subset.to_memory().copy() if subset.isbacked else subset.copy()
 
             sample_res = self(temp, inplace=False, verbose=full_verbose, **kwargs)
+            if not isinstance(sample_res, DataFrame):  # only the consensus path returns a dict
+                raise TypeError(f"Expected a DataFrame of results, got {type(sample_res).__name__}.")
 
-            adata.uns[key_added][sample] = sample_res
+            by_sample[sample] = sample_res
 
-        liana_res = concat(adata.uns[key_added]).reset_index(level=1, drop=True).reset_index()
+        liana_res = concat(by_sample).reset_index(level=1, drop=True).reset_index()
         liana_res = liana_res.rename({"index": sample_key}, axis=1)
 
         if inplace:

@@ -59,7 +59,7 @@ class SpatialBivariate:
         add_categories: bool = False,
         n_perms: int | None = None,
         seed: int = V.seed,
-        nz_prop: float = 0.05,
+        nz_prop: float = V.nz_prop,
         remove_self_interactions: bool = True,
         complex_sep: None | str = "_",
         xy_sep: str = V.lr_sep,
@@ -82,12 +82,8 @@ class SpatialBivariate:
         %(add_categories)s
         %(n_perms)s
         %(seed)s
-        nz_prop
-            Minimum proportion of non-zero values for each features.
-            For example, if working with gene expression data,
-            this would be the proportion of cells expressing a gene.
-            Both features must have a proportion greater than
-            `nz_prop` to be considered in the analysis.
+        %(nz_prop)s
+            Both features must pass the threshold to be considered in the analysis.
         remove_self_interactions
             Whether to remove self-interactions. `True` by default.
         complex_sep

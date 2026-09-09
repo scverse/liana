@@ -8,6 +8,7 @@ from ._annulus import annulus
 from ._circle_plot import circle
 from ._connectivity_plot import connectivity
 from ._dotplot import dotplot, dotplot_by_sample
+from ._elbow import elbow
 from ._feature_by_group import feature_by_group
 from ._lric_plot import lric_divergence, lric_lineplot
 from ._misty_plots import misty_contributions, misty_interactions, misty_target_metrics
@@ -19,6 +20,7 @@ __all__ = [
     "connectivity",
     "dotplot",
     "dotplot_by_sample",
+    "elbow",
     "feature_by_group",
     "lric_divergence",
     "lric_lineplot",

@@ -199,11 +199,11 @@ def _roll_tiles(fine: np.ndarray, n_bins: int, k: int, extend_first: bool) -> np
     return np.asarray(C[his] - C[los])
 
 
-def _expr_prop_mask(mat: np.ndarray, prop_snd: np.ndarray, prop_rcv: np.ndarray, expr_prop: float) -> np.ndarray:
+def _prop_mask(mat: np.ndarray, prop_snd: np.ndarray, prop_rcv: np.ndarray, min_prop: float) -> np.ndarray:
     """NaN out pairs whose sender or receiver expressing-cell proportion is below the threshold."""
-    if expr_prop <= 0:
+    if min_prop <= 0:
         return mat
-    filt = (prop_snd < expr_prop) | (prop_rcv < expr_prop)
+    filt = (prop_snd < min_prop) | (prop_rcv < min_prop)
     if filt.any():
         mat = mat.copy()
         mat[:, filt] = np.nan
@@ -674,7 +674,8 @@ class LRIC:
         cell_types: Sequence[str] | None = None,
         min_cells: int | None = None,
         groupby_pairs: pd.DataFrame | None = V.groupby_pairs,
-        expr_prop: float = 0.0,
+        nz_prop: float = V.nz_prop,
+        expr_prop: float = V.expr_prop,
         complex_sep: str | None = V.complex_sep,
         lr_sep: str = V.lr_sep,
         transform_fn: Callable[[np.ndarray], np.ndarray] | None = None,
@@ -732,10 +733,12 @@ class LRIC:
             sender->receiver combinations actually computed to those listed;
             cell types referenced by ``groupby_pairs`` are also folded into
             ``cell_types``.
+        %(nz_prop)s
+            Only relevant when ``groupby`` is ``None`` (agnostic mode).
+            Interactions below the threshold are set to ``NaN``.
         %(expr_prop)s
-            Computed within the relevant population: each cell type in
-            pairwise mode, all cells in agnostic mode. Pairs below the
-            threshold are set to ``NaN``.
+            Only relevant when ``groupby`` is set; computed within each
+            cell type. Interactions below the threshold are set to ``NaN``.
         complex_sep
             Separator used to identify multi-subunit complexes in the resource
             (e.g. ``"_"`` splits ``"ITGAV_ITGB3"`` into its subunits and adds
@@ -770,7 +773,7 @@ class LRIC:
         where ``g_pcf`` is shared by all LR pairs of a given ``source``
         ->``target``.
 
-        ``expr_prop``-masked interactions are kept as ``NaN`` rows.
+        Interactions masked by ``nz_prop`` / ``expr_prop`` are kept as ``NaN`` rows.
 
         Examples
         --------
@@ -838,7 +841,7 @@ class LRIC:
                 adata=adata,
                 resource=resource,
                 sup=sup,
-                expr_prop=expr_prop,
+                nz_prop=nz_prop,
                 lr_sep=lr_sep,
                 transform_fn=transform_fn,
                 verbose=verbose,
@@ -866,7 +869,7 @@ class LRIC:
         adata: AnnData,
         resource: pd.DataFrame,
         sup: _Support,
-        expr_prop: float,
+        nz_prop: float,
         lr_sep: str,
         transform_fn: Transform | None,
         verbose: bool,
@@ -902,8 +905,8 @@ class LRIC:
             g[denom == 0] = np.nan
         lric = g.astype(np.float32)
 
-        if expr_prop > 0:
-            lric = _expr_prop_mask(lric, (WL > 0).sum(axis=0) / sup.N, (WR > 0).sum(axis=0) / sup.N, expr_prop)
+        if nz_prop > 0:
+            lric = _prop_mask(lric, (WL > 0).sum(axis=0) / sup.N, (WR > 0).sum(axis=0) / sup.N, nz_prop)
         return _melt_curves(
             sup.radii,
             {
@@ -1017,8 +1020,8 @@ class LRIC:
             mat_e = g_expr.astype(np.float32)  # expression coupling ALONE, given where the cells sit
             # set exactly when `expr_prop > 0`
             if pexp_L is not None and pexp_R is not None:
-                mat = _expr_prop_mask(mat, pexp_L[si], pexp_R[ri], expr_prop)
-                mat_e = _expr_prop_mask(mat_e, pexp_L[si], pexp_R[ri], expr_prop)
+                mat = _prop_mask(mat, pexp_L[si], pexp_R[ri], expr_prop)
+                mat_e = _prop_mask(mat_e, pexp_L[si], pexp_R[ri], expr_prop)
 
             blk = slice(k * n_lr, (k + 1) * n_lr)
             G[:, blk], E[:, blk] = mat, mat_e

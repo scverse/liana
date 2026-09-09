@@ -93,7 +93,7 @@ def get_raw_x(adata: AnnData) -> MatrixLike:
     return _to_matrix(adata.raw.X, what="adata.raw.X")
 
 
-def get_coordinates(adata: AnnData, spatial_key: str) -> NDArray[np.float64]:
+def get_coordinates(adata: AnnData | MuData, spatial_key: str) -> NDArray[np.float64]:
     """Return ``adata.obsm[spatial_key]`` as an ``(n_obs, n_dim)`` float array.
 
     `obsm` can hold frames and sparse matrices as well as arrays; every spatial function here needs plain dense coordinates, so the conversion and the accompanying shape check happen once, here.

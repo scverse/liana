@@ -212,7 +212,8 @@ Passed as `model=` when calling a `MistyData` object:
     dotplot
     dotplot_by_sample
     tileplot
-    circle
+    elbow
+    circle_plot
     connectivity
     misty_target_metrics
     misty_contributions

@@ -15,7 +15,8 @@ class DefaultValues:
 
     logbase: Final = exp(1)
     min_cells: Final = 5
-    expr_prop: Final = 0.1
+    expr_prop: Final = 0.05
+    nz_prop: Final = 0.05
     n_perms: Final = 1000
     seed: Final = 1337
     de_method: Final[DeMethod] = "t-test"

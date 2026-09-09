@@ -20,7 +20,7 @@ def test_inflow_basic_structure(toy_spatial: AnnData) -> None:
 
     # Check output structure
     assert isinstance(lrdata, type(toy_spatial))
-    assert lrdata.shape == (toy_spatial.shape[0], 323)  # Fixed expected shape
+    assert lrdata.shape == (toy_spatial.shape[0], 236)  # Fixed expected shape
 
     # Check var index format: "celltype^ligand^receptor"
     assert all("^" in idx for idx in lrdata.var_names)
@@ -92,8 +92,8 @@ def test_inflow_numerical_correctness(toy_spatial: AnnData) -> None:
     lrdata = as_anndata(inflow(toy_spatial, groupby="bulk_labels", resource_name="consensus", use_raw=True))
 
     # Check specific numerical values (regression test)
-    np.testing.assert_almost_equal(get_x(lrdata).mean(), 0.041507, decimal=3)  # Replace with actual
-    np.testing.assert_almost_equal(get_x(lrdata).sum(), 9384.73809, decimal=3)  # Replace with actual
+    np.testing.assert_almost_equal(get_x(lrdata).mean(), 0.053451, decimal=3)
+    np.testing.assert_almost_equal(get_x(lrdata).sum(), 8830.041322, decimal=3)
 
 
 def test_inflow_missing_connectivity(toy_spatial: AnnData) -> None:

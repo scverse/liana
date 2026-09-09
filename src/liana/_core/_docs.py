@@ -145,8 +145,14 @@ n_perms
 
 _expr_prop = """\
 expr_prop
-    Minimum expression proportion for the ligands and receptors (+ their subunits) in the
-    corresponding cell identities. Set to 0 to return unfiltered results."""
+    Minimum expression proportion for the ligands and receptors (+ their subunits) within each
+    cell-type group. Set to 0 to return unfiltered results."""
+
+_nz_prop = """\
+nz_prop
+    Minimum proportion of all observations (cells/spots) with a non-zero value for a variable to be
+    kept. Unlike `expr_prop`, it is computed across all observations, irrespective of any grouping.
+    Set to 0 to return unfiltered results."""
 
 _min_cells = """\
 min_cells
@@ -412,6 +418,7 @@ d = DocstringProcessor(
     n_perms=_n_perms,
     n_perms_sc=_n_perms_sc,
     expr_prop=_expr_prop,
+    nz_prop=_nz_prop,
     min_cells=_min_cells,
     base=_base,
     return_all_lrs=_return_all_lrs,

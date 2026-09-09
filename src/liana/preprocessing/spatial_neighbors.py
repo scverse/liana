@@ -5,6 +5,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 from anndata import AnnData
+from mudata import MuData
 from numpy.typing import ArrayLike, NDArray
 from scipy.stats import trim_mean
 from sklearn.neighbors import NearestNeighbors
@@ -64,7 +65,7 @@ def _kernel_scalar(distance: _Bandwidth, bandwidth: _Bandwidth, kernel: _Kernel)
 
 @d.dedent
 def spatial_neighbors(
-    adata: AnnData,
+    adata: AnnData | MuData,
     bandwidth: float | None = None,
     cutoff: float | None = 0.1,
     max_neighbours: int = 100,
@@ -82,7 +83,8 @@ def spatial_neighbors(
 
     Parameters
     ----------
-    %(adata)s
+    adata
+        Annotated data object (`AnnData` or `MuData`) with spatial coordinates in `.obsm[spatial_key]`.
     %(bandwidth)s
     cutoff
         Values below this cutoff will be set to 0.
@@ -91,7 +93,7 @@ def spatial_neighbors(
         Essentially, the maximum number of edges in the spatial connectivity graph.
     %(kernel)s
     set_diag
-        Logical, sets connectivity diagonal to 0 if `False`. Default is `True`.
+        Logical, sets connectivity diagonal to 0 if `False`. Default is `False`.
     zoi
         Zone of indifference. Values below this cutoff will be set to `np.inf`.
     standardize

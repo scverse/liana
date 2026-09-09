@@ -392,9 +392,6 @@ def liana_pipe_consensus(
     A DataFrame of aggregated ligand-receptor results, or -- when `consensus_opts` is
     `False` -- a DataFrame per method, keyed by method name.
     """
-    if n_perms is None:
-        consensus_opts = ["Magnitude"]
-
     add_cols = consensus.add_cols + _SUBUNIT_COLS
 
     adata, lr_res = _prepare_lr_stats(
@@ -448,6 +445,7 @@ def liana_pipe_consensus(
         aggregate_method=aggregate_method,
         _key_cols=P.primary,
         _consensus_opts=consensus_opts,
+        verbose=verbose,
     )
 
     return _sort_by_score(aggregated, consensus)
