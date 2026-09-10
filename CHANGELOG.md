@@ -70,6 +70,8 @@ liana+ now has a new home under the scverse organisation.
 
 ### Fixed
 
+- **CellChat no longer corrupts the permutation null of every method that follows it in a consensus.** `_get_means_perms` wrote its `X / mat_max` normalisation back into the shared `adata`, so a later permutation method built its null on the shrunken matrix while its observed statistic came from the unnormalised one. This was a silient bug what did not affect any default results, but it could if the aggregate_rank was constructed in a different order.
+
 - **`li.rs.get_metalinks` and `li.rs.get_hcop_orthologs` no longer download into the working directory.** Both wrote their file to `os.getcwd()`, so calling either from a checkout dropped an untracked artifact into the repo, changing directory silently re-downloaded, and two processes in one directory raced on the same path. Both go through :func:`pooch.retrieve` now, as the rest of scverse does, caching under :attr:`scanpy.settings.datasetdir` alongside what `li.ds` fetches; `_download_metalinksdb` takes a `cache_dir` for callers that want their own. MetaLinksDB is checked against a pinned `sha256`, so a truncated or corrupted copy is re-fetched rather than served from the cache forever -- the previous code only rejected a file of length zero. Neither call had passed a timeout, so a stalled server blocked indefinitely.
 
 - `li.rs.get_metalinks_values` opened two connections to the database and closed one.
