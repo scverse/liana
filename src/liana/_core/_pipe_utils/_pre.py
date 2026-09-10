@@ -84,6 +84,7 @@ def prep_check_adata(
     obsm: Mapping[str, ObsmValue | AnnData] | None = None,
     uns: dict[str, Any] | None = None,
     complex_sep: str | None = "_",
+    block_negatives: bool = False,
     verbose: bool = False,
 ) -> AnnData:
     """
@@ -112,13 +113,19 @@ def prep_check_adata(
         `AnnData.uns` unspecified mappings to inmclude in the resulting AnnData
     complex_sep
         Separator to use for complex names.
+    block_negatives
+        Reject a matrix carrying negative values. The single-cell methods assume
+        non-negative expression -- `sqrt`, `log2` and `gmean` of a negative mean are
+        all `NaN` -- so they pass `True`; the spatial and bivariate methods work on
+        signed data and leave it `False`.
     verbose
         Verbosity flag.
 
     Raises
     ------
     ValueError
-        If the data matrix contains non-finite values (NaN or Inf)
+        If the data matrix contains non-finite values (NaN or Inf), or negative
+        values while `block_negatives` is set.
 
     Returns
     -------
@@ -177,6 +184,14 @@ def prep_check_adata(
     # Check for non-finite values
     if np.any(~np.isfinite(X.data)):
         raise ValueError("mat contains non finite values (nan or inf), please set them to 0 or remove them.")
+
+    # Check for negative values, where the caller cannot work with them
+    if block_negatives and X.data.size > 0 and X.data.min() < 0:
+        raise ValueError(
+            f"mat contains negative values (minimum: {X.data.min():.4g}), but this method requires "
+            "non-negative expression -- scaled or centred data yields NaN scores. Pass log-normalised "
+            "counts via `use_raw=True`, `layer=...`, or place them in `.X`."
+        )
 
     if groupby is not None:
         _check_groupby(adata, groupby, verbose)

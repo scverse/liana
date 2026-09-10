@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from anndata import AnnData
 from fast_array_utils.conv import to_dense
-from tests._helpers import as_frame, get_csr, get_layer_csr, get_x
+from tests._helpers import as_frame, get_csr, get_layer_csr, get_raw_csr, get_x
 
 from liana._core._pipe_utils._pre import assert_covered, prep_check_adata
 
@@ -22,10 +22,10 @@ def test_prep_check_adata(pbmc68k: AnnData) -> None:
 
 
 def test_default_reads_X_not_raw(pbmc68k: AnnData) -> None:
-    # Guards the public default: use_raw defaults to False, so methods read .X.
-    # pbmc68k_reduced ships scaled data in .X and log-norm in .raw, so the two
-    # paths give different results -- the default must match the .X path.
     from liana.method import cellphonedb
+
+    pbmc68k.X = get_raw_csr(pbmc68k).expm1()
+    assert get_x(pbmc68k).min() >= 0
 
     default = as_frame(cellphonedb(pbmc68k, groupby="bulk_labels", n_perms=None, inplace=False))
     from_x = as_frame(cellphonedb(pbmc68k, groupby="bulk_labels", n_perms=None, inplace=False, use_raw=False))
@@ -33,6 +33,29 @@ def test_default_reads_X_not_raw(pbmc68k: AnnData) -> None:
 
     assert default.equals(from_x)  # default == .X
     assert not default.equals(from_raw)  # and differs from .raw
+
+
+def test_block_negatives_raises(pbmc68k: AnnData) -> None:
+    # pbmc68k_reduced ships scaled (centred) data in .X. `sqrt`, `log2` and `gmean` of a
+    # negative mean are all NaN, so the single-cell pipe refuses it rather than scoring it.
+    assert get_x(pbmc68k).min() < 0
+
+    with pytest.raises(ValueError, match="negative values"):
+        prep_check_adata(adata=pbmc68k, groupby="bulk_labels", min_cells=5, block_negatives=True)
+
+    # off by default, so the signed-data callers (bivariate, misty, LRIC) are unaffected
+    prep_check_adata(adata=pbmc68k, groupby="bulk_labels", min_cells=5)
+    # and log-normalised input passes with the check on
+    prep_check_adata(adata=pbmc68k, groupby="bulk_labels", min_cells=5, use_raw=True, block_negatives=True)
+
+
+def test_sc_methods_reject_negatives(pbmc68k: AnnData) -> None:
+    # the pipe is the funnel: every `li.mt` single-cell method inherits the check
+    from liana.method import cellphonedb, rank_aggregate
+
+    for method in (cellphonedb, rank_aggregate):
+        with pytest.raises(ValueError, match="negative values"):
+            method(pbmc68k, groupby="bulk_labels", n_perms=None, inplace=False)
 
 
 def test_check_if_covered(pbmc68k: AnnData) -> None:

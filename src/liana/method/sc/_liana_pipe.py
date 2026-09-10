@@ -133,6 +133,7 @@ def _prepare_lr_stats(
         use_raw=use_raw,
         layer=layer,
         obsm=adata.obsm if spatial_key else None,
+        block_negatives=True,
         verbose=verbose,
     )
 
