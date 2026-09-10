@@ -54,9 +54,6 @@ def _filter_reassemble_complexes(
     else:
         expressed["lrs_to_keep"] = True
         lr_res = lr_res.merge(expressed, how="left", on=_key_cols)
-        # deal with duplicated subunits
-        # subunits that are not expressed might not represent the most relevant subunit
-        lr_res.drop_duplicates(subset=_key_cols, inplace=True)
         # chained inplace assignment is a no-op under copy-on-write
         # `~` on an object-dtype bool is a bitwise not, so `~True == -2`
         lr_res["lrs_to_keep"] = lr_res["lrs_to_keep"].fillna(value=False).astype(bool)

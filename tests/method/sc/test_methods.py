@@ -123,7 +123,11 @@ def test_scseqcomm(toy_adata: AnnData, expected_shape: tuple[int, int]) -> None:
         0.6819619345,
         decimal=5,
     )
-    assert_almost_equal(max(liana_res[(liana_res.receptor_complex == "CD74_CXCR4")]["inter_score"]), 1, decimal=6)
+    # scored by CXCR4, the limiting subunit of CD74_CXCR4 -- picking the highly expressed
+    # CD74 instead saturated `inter_score` at exactly 1.0
+    assert_almost_equal(
+        max(liana_res[(liana_res.receptor_complex == "CD74_CXCR4")]["inter_score"]), 0.999443104603042, decimal=6
+    )
 
 
 def test_sca(toy_adata: AnnData, expected_shape: tuple[int, int]) -> None:

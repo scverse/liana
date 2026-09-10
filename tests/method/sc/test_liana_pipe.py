@@ -4,9 +4,10 @@ from itertools import product
 import numpy as np
 import pytest
 from anndata import AnnData
+from fast_array_utils.conv import to_dense
 from pandas import DataFrame, read_csv
 from pandas.testing import assert_frame_equal
-from tests._helpers import as_frame, get_obs, get_raw_csr
+from tests._helpers import as_frame, get_csr, get_obs, get_raw_csr
 
 from liana._core._constants import DefaultValues as V
 from liana.method.sc._liana_pipe import _calc_log2fc, _expm1_base, liana_pipe
@@ -59,6 +60,93 @@ def test_liana_pipe_defaults(pbmc68k: AnnData, data_dir: pathlib.Path) -> None:
     assert_frame_equal(
         all_defaults, exp_defaults, check_dtype=False, check_exact=False, check_index_type=False, rtol=1e-3
     )
+
+
+# A heteromeric complex scores by its *limiting* subunit -- `return_all_lrs` used to
+# collapse the exploded subunits by resource order before that reduction could run.
+SOURCE, TARGET = "CD14+ Monocyte", "CD8+ Cytotoxic T"
+COMPLEX = "CD74_CXCR4"
+
+
+def _group_stats(adata: AnnData, gene: str, label: str) -> tuple[float, float]:
+    """Mean expression of `gene` over the cells of one group, and the fraction expressing it."""
+    column = to_dense(get_csr(adata[:, gene])).ravel()
+    values = column[get_obs(adata)[groupby].to_numpy() == label]
+    return float(values.mean()), float((values > 0).mean())
+
+
+@pytest.mark.parametrize("return_all_lrs", [False, True])
+def test_complex_reduces_to_min_subunit(pbmc68k: AnnData, return_all_lrs: bool) -> None:
+    expr_prop = 0.2
+
+    # ground truth, straight off the matrix: what each subunit is worth on its own
+    subunits = {name: _group_stats(pbmc68k, name, TARGET) for name in COMPLEX.split("_")}
+    ligand_mean, ligand_prop = _group_stats(pbmc68k, "MIF", SOURCE)
+
+    limiting = min(subunits, key=lambda name: subunits[name][0])
+    first = COMPLEX.split("_")[0]
+    # the two subunits have to disagree, and the first-listed one has to be the wrong
+    # answer, or the assertions below cannot tell the two code paths apart
+    assert len({mean for mean, _ in subunits.values()}) == len(subunits)
+    assert first != limiting
+
+    lr_res = as_frame(
+        liana_pipe(
+            adata=pbmc68k,
+            groupby=groupby,
+            resource_name=V.resource_name,
+            expr_prop=expr_prop,
+            groupby_pairs=V.groupby_pairs,
+            min_cells=V.min_cells,
+            de_method="wilcoxon",
+            base=V.logbase,
+            n_perms=None,
+            seed=V.seed,
+            verbose=V.verbose,
+            supp_columns=[],
+            resource=V.resource,
+            use_raw=False,
+            layer=V.layer,
+            return_all_lrs=return_all_lrs,
+            n_jobs=1,
+            interactions=V.interactions,
+        )
+    )
+
+    match = lr_res[
+        (lr_res["ligand_complex"] == "MIF")
+        & (lr_res["receptor_complex"] == COMPLEX)
+        & (lr_res["source"] == SOURCE)
+        & (lr_res["target"] == TARGET)
+    ]
+    assert len(match) == 1
+    row = match.iloc[0]
+
+    # the complex is represented by its weakest subunit, not by whichever is listed first
+    assert row["receptor"] == limiting
+    assert row["receptor_means"] == pytest.approx(subunits[limiting][0], rel=1e-3)
+    assert row["receptor_props"] == pytest.approx(subunits[limiting][1], rel=1e-3)
+    assert row["receptor_means"] != pytest.approx(subunits[first][0], rel=1e-3)
+
+    # the ligand is a single subunit, so it is carried through untouched
+    assert row["ligand"] == "MIF"
+    assert row["ligand_means"] == pytest.approx(ligand_mean, rel=1e-3)
+
+    # the expr_prop gate reads every subunit's *proportion*, both sides of the interaction
+    props = [ligand_prop] + [prop for _, prop in subunits.values()]
+    assert row["prop_min"] == pytest.approx(min(props), rel=1e-3)
+    if return_all_lrs:
+        assert bool(row["lrs_to_keep"]) is (min(props) >= expr_prop)
+
+    # and the values themselves, so a shift in the fixture or in how the means are
+    # computed surfaces here rather than silently redefining what the test compares
+    assert {name: mean for name, (mean, _) in subunits.items()} == pytest.approx(
+        {"CD74": 2.331778, "CXCR4": 0.705593}, rel=1e-3
+    )
+    assert {name: prop for name, (_, prop) in subunits.items()} == pytest.approx(
+        {"CD74": 0.870370, "CXCR4": 0.370370}, rel=1e-3
+    )
+    assert (ligand_mean, ligand_prop) == pytest.approx((0.521814, 0.325581), rel=1e-3)
 
 
 # Test NOT Default parameters
