@@ -53,7 +53,9 @@ high-high. `use_raw` and `layer` are keyword-only extras, not positional.
 
 ## Footguns
 
-- Missing `obsp["spatial_connectivities"]` raises: always run `spatial_neighbors` first.
+- Missing `obsp["spatial_connectivities"]` raises: always run `spatial_neighbors` first. A *stale*
+  graph under that key is reused silently, so re-run it after changing the coordinates, `bandwidth`
+  or the subset of cells.
 - Several slides concatenated share coordinate space and produce false neighbours: run
   `li.pp.expand_coordinates(adata, sample_key="sample")` before `spatial_neighbors`.
 - Moran's R is limited to two variables; for non-linear or multi-factor questions use MISTy (`misty.md`).

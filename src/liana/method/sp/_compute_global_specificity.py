@@ -40,7 +40,7 @@ def compute_global_specificity(
     n_perms: int = V.n_perms,
     seed: int = V.seed,
     n_jobs: int = -1,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
     use_raw: bool = V.use_raw,
     layer: str | None = V.layer,
     uns_key: str = "global_interactions",

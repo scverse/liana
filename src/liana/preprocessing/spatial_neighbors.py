@@ -91,6 +91,8 @@ def spatial_neighbors(
     max_neighbours
         Maximum nearest neighbours to be considered when generating spatial connectivity weights.
         Essentially, the maximum number of edges in the spatial connectivity graph.
+        Note that whenever more than `max_neighbours` spots fall within `cutoff` this truncates
+        the neighbourhood, and the resulting connectivities are no longer symmetric.
     %(kernel)s
     set_diag
         Logical, sets connectivity diagonal to 0 if `False`. Default is `False`.
@@ -209,7 +211,7 @@ def spatial_pair_proximity(
     min_cells_in_proximity: int = 10,
     trim_fraction: float = 0.1,
     kernel: _Kernel = "gaussian",
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
 ) -> pd.DataFrame:
     """
     Computes aggregated spatial statistics and proximity scores between cell types.

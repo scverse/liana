@@ -134,7 +134,7 @@ class MethodMeta:
         sample_key: str,
         key_added: str = K.uns_key,
         inplace: bool = V.inplace,
-        verbose: bool | Literal["full"] = V.verbose,
+        verbose: bool | None | Literal["full"] = V.verbose,
         **kwargs: object,
     ) -> DataFrame | None:
         """
@@ -170,7 +170,11 @@ class MethodMeta:
         show_progress = bool(verbose)
 
         if not obs[sample_key].dtype.name == "category":
-            _logg(f"Converting `{sample_key}` to categorical!", level="warn", verbose=show_progress)
+            _logg(
+                f"Converting `{sample_key}` to categorical!",
+                level="warn",
+                verbose=None if verbose is None else show_progress,
+            )
             obs[sample_key] = obs[sample_key].astype("category")
 
         samples = obs[sample_key].cat.categories
@@ -256,7 +260,7 @@ class Method(MethodMeta):
         spatial_kwargs: SpatialKwargs | None = None,
         mdata_kwargs: MdataKwargs | None = None,
         inplace: bool = V.inplace,
-        verbose: bool = V.verbose,
+        verbose: bool | None = V.verbose,
     ) -> DataFrame | None:
         """
         Run a ligand-receptor method.

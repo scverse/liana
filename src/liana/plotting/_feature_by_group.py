@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from liana._core._common import _logg
+from liana._core._constants import DefaultValues as V
 from liana._core._constants import Keys as K
 from liana._core._docs import d
 from liana._core._types import get_coordinates, get_obs, get_x
@@ -38,6 +39,7 @@ def feature_by_group(
     normalize: bool = True,
     percentile_scaling: tuple[int, int] | None = None,
     show_counts: bool = True,
+    verbose: bool | None = V.verbose,
 ) -> tuple[Figure, Axes]:
     """
     Plot inflow scores for single feature across spatial coordinates.
@@ -58,6 +60,7 @@ def feature_by_group(
         Tuple specifying percentiles for scaling.
     show_counts
         Show counts of expression cells (expression > 0).
+    %(verbose)s
 
     Returns
     -------
@@ -97,7 +100,7 @@ def feature_by_group(
     for label in labels:
         mask = np.asarray(get_obs(adata)[groupby] == label)
         if not np.any(mask):
-            _logg(f"No cells found for label '{label}' in groupby '{groupby}'", level="warn", verbose=True)
+            _logg(f"No cells found for label '{label}' in groupby '{groupby}'", level="warn", verbose=verbose)
             continue
         sub_x = get_x(adata[mask, :][:, feature])
         dense = sub_x if isinstance(sub_x, np.ndarray) else sub_x.toarray()

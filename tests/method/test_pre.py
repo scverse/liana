@@ -1,3 +1,6 @@
+import warnings
+from collections.abc import Callable
+
 import numpy as np
 import pytest
 from anndata import AnnData
@@ -56,6 +59,57 @@ def test_sc_methods_reject_negatives(pbmc68k: AnnData) -> None:
     for method in (cellphonedb, rank_aggregate):
         with pytest.raises(ValueError, match="negative values"):
             method(pbmc68k, groupby="bulk_labels", n_perms=None, inplace=False)
+
+
+def _counts(seed: int = 0) -> np.ndarray:
+    """A sparse integer count matrix, the shape of input the heuristic has to recognise."""
+    rng = np.random.default_rng(seed)
+    X = rng.negative_binomial(3, 0.3, (200, 100)).astype("float32")
+    X[rng.random(X.shape) < 0.6] = 0
+    return X
+
+
+def _cp10k(X: np.ndarray) -> np.ndarray:
+    return np.asarray(X / np.maximum(X.sum(1, keepdims=True), 1e-9) * 1e4)
+
+
+def _lognorm_warnings(X: np.ndarray, *, block_negatives: bool) -> list[str]:
+    adata = AnnData(X)
+    adata.var_names = [f"g{i}" for i in range(adata.n_vars)]
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        prep_check_adata(adata=adata, groupby=None, min_cells=None, block_negatives=block_negatives)
+    return [str(w.message) for w in caught if "log1p-normalised" in str(w.message)]
+
+
+@pytest.mark.parametrize(
+    ("name", "build", "expect"),
+    [
+        ("log-normalised", lambda X: np.log1p(_cp10k(X)), None),
+        ("raw counts", lambda X: X, "its values are all integers"),
+        ("shallow counts", lambda X: np.minimum(X, 3.0), "its values are all integers"),
+        ("normalised, not logged", _cp10k, "its maximum is"),
+        # a binary indicator and a constant matrix say nothing about normalisation -- the spatial
+        # methods pass both legitimately, so neither may trip the integer test
+        ("binary indicator", lambda X: (X > 0).astype("float32"), None),
+        ("constant", lambda X: np.ones_like(X), None),
+        ("empty", lambda X: np.zeros_like(X), None),
+    ],
+)
+def test_lognorm_heuristic(name: str, build: Callable[[np.ndarray], np.ndarray], expect: str | None) -> None:
+    hits = _lognorm_warnings(build(_counts()), block_negatives=True)
+    if expect is None:
+        assert not hits, f"{name} must not warn, got {hits}"
+    else:
+        assert len(hits) == 1 and expect in hits[0], f"{name}: {hits}"
+
+
+def test_lognorm_heuristic_only_for_block_negatives() -> None:
+    """The spatial and bivariate methods take signed data of any scale, so the advice does not apply."""
+    counts = _counts()
+    assert _lognorm_warnings(counts, block_negatives=True), "sanity: counts must warn when the flag is set"
+    assert not _lognorm_warnings(counts, block_negatives=False)
+    assert not _lognorm_warnings(_cp10k(counts), block_negatives=False)
 
 
 def test_check_if_covered(pbmc68k: AnnData) -> None:

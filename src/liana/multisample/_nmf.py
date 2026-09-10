@@ -21,7 +21,7 @@ def nmf(
     use_raw: bool = False,
     layer: str | None = None,
     inplace: bool = True,
-    verbose: bool = False,
+    verbose: bool | None = False,
     **kwargs: object,
 ) -> tuple[np.ndarray, np.ndarray, pd.DataFrame | None, int | None] | None:
     """
@@ -104,7 +104,7 @@ def nmf(
 def estimate_elbow(
     X: MatrixLike,
     k_range: range,
-    verbose: bool = False,
+    verbose: bool | None = False,
     **kwargs: object,
 ) -> tuple[pd.DataFrame, int | None]:
     """

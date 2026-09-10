@@ -25,7 +25,7 @@ def adata_to_views(
     obs_keys: list[str] | None = None,
     view_sep: str = ":",
     keep_stats: bool = False,
-    verbose: bool = False,
+    verbose: bool | None = False,
     psbulk_kwargs: dict[str, object] | None = None,
     filter_samples_kwargs: dict[str, object] | None = None,
     filter_by_expr_kwargs: dict[str, object] | None = None,
@@ -168,7 +168,7 @@ def lrs_to_views(
     target_key: str = P.target,
     ligand_key: str = P.ligand_complex,
     receptor_key: str = P.receptor_complex,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
 ) -> MuData:
     """
     Converts a LIANA result to a MuData object with views that represent an aggregate for each entity in `adata.obs[groupby]`.
@@ -349,7 +349,7 @@ def lrdata_to_mudata(
     min_cells: int | None = V.min_cells,
     min_features: int | None = 10,
     obs_keys: list[str] | None = None,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
 ) -> MuData:
     """
     Convert an inflow score AnnData object to a MuData object, where each modality corresponds to a unique sender cell type.

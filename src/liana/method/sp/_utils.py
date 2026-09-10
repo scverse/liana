@@ -140,7 +140,7 @@ def _check_instance(mdata: AnnData | MuData) -> bool:
 def _process_anndata(
     adata: AnnData,
     complex_sep: str | None,
-    verbose: bool,
+    verbose: bool | None,
     **kwargs: Any,
 ) -> tuple[AnnData, str, str]:
     """
@@ -195,7 +195,7 @@ def _process_anndata(
 def _process_mudata(
     mdata: MuData,
     complex_sep: str | None,
-    verbose: bool,
+    verbose: bool | None,
     **kwargs: Any,
 ) -> tuple[AnnData, str, str]:
     """

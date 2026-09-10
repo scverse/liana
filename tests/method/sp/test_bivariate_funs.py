@@ -137,6 +137,7 @@ def test_local_zscore_pvals(pval_mats: SimpleNamespace) -> None:
         weight=pval_mats.weight,
         local_truth=local_truth,
         mask_negatives=pval_mats.mask_negatives,
+        verbose=False,
     )
     assert actual.shape == (10, 10)
 
@@ -162,3 +163,119 @@ def test_global_permutation_pvals(pval_mats: SimpleNamespace) -> None:
         verbose=False,
     )
     assert pvals.shape == (10,)
+
+
+def _lee_closed_form(x: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
+    """Lee's L straight from its definition (Lee 2001, J. Geograph. Syst.).
+
+    Deliberately written with spatial lags rather than a `W`-product, so it is
+    independent of whether the implementation uses ``W @ W`` or ``W.T @ W``.
+    """
+    zx = (x - x.mean()) / x.std()
+    zy = (y - y.mean()) / y.std()
+    return float((w @ zx * (w @ zy)).sum() / (w.sum(axis=1) ** 2).sum())
+
+
+def test_lee_matches_closed_form_on_asymmetric_weight() -> None:
+    """Global Lee's L needs ``W.T @ W``; ``W @ W`` silently agrees only for symmetric W."""
+    from liana.method.sp._bivariate._global_functions import _lee_stat
+
+    rng = np.random.default_rng(0)
+    n = 40
+    # a k-NN style weight: every row keeps 5 random off-diagonal entries -> asymmetric
+    dense = np.zeros((n, n))
+    for i in range(n):
+        nbrs = rng.choice([j for j in range(n) if j != i], size=5, replace=False)
+        dense[i, nbrs] = rng.uniform(0.1, 1.0, size=5)
+    assert np.abs(dense - dense.T).sum() > 0, "fixture must be asymmetric"
+
+    weight = csr_matrix(dense)
+    x = rng.normal(size=(n, 1))
+    y = rng.normal(size=(n, 1))
+    zx = (x - x.mean(0)) / x.std(0)
+    zy = (y - y.mean(0)) / y.std(0)
+
+    expected = _lee_closed_form(x[:, 0], y[:, 0], dense)
+    actual = _lee_stat(zx, zy, csr_matrix(weight.T @ weight))[0]
+    np.testing.assert_allclose(actual, expected, rtol=1e-10)
+
+    # guard the regression: the old operator disagrees on an asymmetric weight
+    wrong = _lee_stat(zx, zy, weight * weight)[0]
+    assert abs(wrong - expected) > 1e-6
+
+
+def test_local_std_has_no_constant_offset() -> None:
+    """The local Moran's R null variance is ``2 s_x^2 s_y^2 (sum_j w_ij^2 + w_ii^2)``.
+
+    spatialDM adds a further ``w_ii``-independent constant (its hardcoded ``wii=1``),
+    which makes the analytical p-values far too conservative once the weights are
+    normalised. Assert the variance is purely proportional to the weight row sums.
+    """
+    local_morans = LocalFunction._get_instance("morans")
+    rng = np.random.default_rng(0)
+    n = 30
+    dense = rng.uniform(size=(n, n))
+    np.fill_diagonal(dense, 0.0)
+
+    sigma = np.array([1.0, 2.0])
+    std = local_morans._get_local_std(sigma, sigma, csr_matrix(dense), n)
+
+    dim = 2 * (n - 1) ** 2 / n**2
+    expected = np.sqrt(np.multiply.outer((dense**2).sum(axis=1), dim * sigma**2 * sigma**2))
+    np.testing.assert_allclose(std, expected, rtol=1e-10)
+
+    # doubling the weights must scale the std by exactly 2; a constant offset would break this
+    doubled = local_morans._get_local_std(sigma, sigma, csr_matrix(2 * dense), n)
+    np.testing.assert_allclose(doubled, 2 * std, rtol=1e-10)
+
+
+def test_local_std_uses_the_weight_diagonal() -> None:
+    """A non-zero diagonal (``set_diag=True``) must contribute ``w_ii**2``."""
+    local_morans = LocalFunction._get_instance("morans")
+    rng = np.random.default_rng(1)
+    n = 25
+    dense = rng.uniform(size=(n, n))
+    np.fill_diagonal(dense, 0.0)
+    sigma = np.array([1.0])
+
+    zero_diag = local_morans._get_local_std(sigma, sigma, csr_matrix(dense), n)
+    with_diag = dense.copy()
+    np.fill_diagonal(with_diag, 0.7)
+    non_zero = local_morans._get_local_std(sigma, sigma, csr_matrix(with_diag), n)
+
+    dim = 2 * (n - 1) ** 2 / n**2
+    # variance gains exactly 2 * w_ii**2 (once from sum_j w_ij**2, once from the w_ii**2 term)
+    gain = np.multiply.outer(np.repeat(2 * 0.7**2, n), dim * sigma**2 * sigma**2)
+    np.testing.assert_allclose(non_zero**2, zero_diag**2 + gain, rtol=1e-10)
+
+
+def test_local_std_sparse_matches_dense() -> None:
+    """The sparse path must not change the result -- it only avoids an O(n^2) densification."""
+    local_morans = LocalFunction._get_instance("morans")
+    rng = np.random.default_rng(2)
+    n = 20
+    dense = rng.uniform(size=(n, n))
+    np.fill_diagonal(dense, 0.3)
+    sigma = np.array([1.0, 0.5])
+
+    np.testing.assert_allclose(
+        local_morans._get_local_std(sigma, sigma, csr_matrix(dense), n),
+        local_morans._get_local_std(sigma, sigma, dense, n),
+        rtol=1e-10,
+    )
+
+
+def test_local_analytical_pvals_are_two_sided(pval_mats: SimpleNamespace) -> None:
+    """With ``mask_negatives=False`` the p-values must be two-sided, i.e. able to exceed 0.5."""
+    local_morans = LocalFunction._get_instance("morans")
+    local_truth = np.zeros((10, 10))  # z == 0 everywhere -> a two-sided p-value of exactly 1
+
+    actual = local_morans._zscore_pvals(
+        x_mat=pval_mats.x_mat,
+        y_mat=pval_mats.y_mat,
+        weight=pval_mats.weight,
+        local_truth=local_truth,
+        mask_negatives=False,
+        verbose=False,
+    )
+    np.testing.assert_allclose(actual, 1.0, rtol=1e-10)

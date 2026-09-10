@@ -118,7 +118,9 @@ inplace
 
 _verbose = """\
 verbose
-    Verbosity flag."""
+    Verbosity flag. `False`, the default, hides progress and info messages but
+    still warns about data-altering conditions; `True` shows both; `None`
+    silences everything, warnings included."""
 
 _lr_sep = """\
 lr_sep

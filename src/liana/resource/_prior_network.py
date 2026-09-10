@@ -18,7 +18,7 @@ def build_prior_network(
     input_nodes: Mapping[str, float],
     output_nodes: Mapping[str, float],
     lr_sep: str | None = None,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
 ) -> Graph:
     """
     Build Prior Network from PPIs and input/output nodes.

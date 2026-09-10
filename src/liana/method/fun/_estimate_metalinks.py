@@ -21,7 +21,7 @@ def estimate_metalinks(
     y_name: str = "receptor",
     use_raw: bool = V.use_raw,
     layer: str | None = V.layer,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
     **kwargs: object,
 ) -> MuData:
     """

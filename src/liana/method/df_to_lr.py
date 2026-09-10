@@ -36,7 +36,7 @@ def df_to_lr(
     source_labels: list[str] | None = None,
     target_labels: list[str] | None = None,
     lr_sep: str = V.lr_sep,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
 ) -> pd.DataFrame:
     """
     Convert DEA results to ligand-receptor pairs.

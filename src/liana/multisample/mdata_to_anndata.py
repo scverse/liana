@@ -26,7 +26,7 @@ def mdata_to_anndata(
     y_use_raw: bool = False,
     x_transform: _MatrixTransform | None = None,
     y_transform: _MatrixTransform | None = None,
-    verbose: bool = True,
+    verbose: bool | None = True,
 ) -> an.AnnData:
     """
     Convert a MultiData object to an AnnData object.
@@ -90,7 +90,7 @@ def _handle_mod(
     use_raw: bool,
     layer: str | None,
     transform: _MatrixTransform | None,
-    verbose: bool,
+    verbose: bool | None,
 ) -> an.AnnData:
     if mod not in mdata.mod.keys():
         raise ValueError(f"`{mod}` is not in the mdata!")

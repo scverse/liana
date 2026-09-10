@@ -101,12 +101,12 @@ def test_shared_score_column_ranked_once() -> None:
     assert lr_res["expr_prod"].tolist() == [3.0, 2.0, 1.0]  # input left untouched
 
 
-def test_aggregate_single_method_warns(toy_adata: AnnData, caplog: pytest.LogCaptureFixture) -> None:
+def test_aggregate_single_method_warns(toy_adata: AnnData) -> None:
     from liana.method.sc._natmi import natmi
     from liana.method.sc._rank_aggregate import _rank_aggregate_meta
 
-    AggregateClass(_rank_aggregate_meta, methods=[natmi])(toy_adata, groupby="bulk_labels", n_perms=None, verbose=True)
-    assert "Aggregating over 1 score(s) only: ['spec_weight']" in caplog.text
+    with pytest.warns(UserWarning, match=r"Aggregating over 1 score\(s\) only: \['spec_weight'\]"):
+        AggregateClass(_rank_aggregate_meta, methods=[natmi])(toy_adata, groupby="bulk_labels", n_perms=None)
 
 
 def test_aggregate_on_mdata(toy_mdata: MuData) -> None:

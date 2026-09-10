@@ -55,7 +55,7 @@ class SpatialInflow:
         use_raw: bool = V.use_raw,
         layer: str | None = V.layer,
         xy_sep: str = V.lr_sep,
-        verbose: bool = V.verbose,
+        verbose: bool | None = V.verbose,
         **kwargs: object,
     ) -> AnnData:
         """

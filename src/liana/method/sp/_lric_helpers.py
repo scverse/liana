@@ -8,6 +8,7 @@ from anndata import AnnData
 from numpy.typing import NDArray
 
 from liana._core._common import _get_liana_res, _logg
+from liana._core._constants import DefaultValues as V
 from liana._core._docs import d
 
 _ID_COLS = ("source", "target", "ligand_complex", "receptor_complex", "interaction")
@@ -32,6 +33,7 @@ def get_lric_auc(
     max_dist: float | None = None,
     transform_fn: CurveTransform = _log2_floor,
     min_bins: int = 3,
+    verbose: bool | None = V.verbose,
 ) -> pd.DataFrame:
     """
     Summarise a ``lric`` / ``cross_pcf`` result into one score per interaction.
@@ -59,6 +61,7 @@ def get_lric_auc(
     min_bins
         Drop interactions with fewer than this many finite bins in the window
         (a support gate for proportion-masked / degenerate interactions).
+    %(verbose)s
 
     Returns
     -------
@@ -121,7 +124,7 @@ def get_lric_auc(
                 f"every interaction has <{min_bins} finite g(r) bins in-window "
                 "(nz_prop/expr_prop masking / sparse geometry) — lower min_bins or the threshold"
             )
-        _logg(msg, level="warn", verbose=True)
+        _logg(msg, level="warn", verbose=verbose)
     out = keys[ok].to_frame(index=False)
     out["score"] = area[ok] / span[ok]
     out["peak_radius"] = radii[np.where(keep, np.abs(Y), -np.inf).argmax(axis=1)][ok]

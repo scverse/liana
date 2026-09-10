@@ -32,7 +32,7 @@ def find_causalnet(
     seed: int = 1337,
     max_runs: int = 1,
     stable_runs: int = 5,
-    verbose: bool = True,
+    verbose: bool | None = True,
     **kwargs: object,
 ) -> tuple[pd.DataFrame | None, ProblemDef]:
     """
@@ -160,7 +160,7 @@ def find_causalnet(
         P.add_objectives(W.T @ E)
 
         _logg(f"Solving with {solver}...", verbose=verbose)
-        P.solve(solver=solver, verbosity=int(verbose), **kwargs)
+        P.solve(solver=solver, verbosity=int(bool(verbose)), **kwargs)
 
         obj_names = ["Loss (unfitted inputs/output)", "Edge penalty error", "Node penalty error"]
         _logg("Solution summary:", verbose=verbose)

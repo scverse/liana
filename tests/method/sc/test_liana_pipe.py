@@ -223,6 +223,29 @@ def test_expm1_fun(pbmc68k: AnnData) -> None:
     np.testing.assert_almost_equal(np.sum(expm1_mat), 1386299.6, decimal=1)
 
 
+@pytest.mark.parametrize(
+    ("dtype", "base", "limit"), [("float32", np.e, 88.72), ("float64", np.e, 709.78), ("float32", 2.0, 128.0)]
+)
+def test_expm1_base_rejects_untransformed_counts(dtype: str, base: float, limit: float) -> None:
+    # `base ** x` is monotonic, so the max decides: just under the limit is finite, just over is `inf`
+    np.testing.assert_allclose(
+        np.log(np.finfo(np.result_type(base, np.dtype(dtype))).max) / np.log(base), limit, rtol=1e-4
+    )
+
+    ok = np.array([0.0, limit * 0.99], dtype=dtype)
+    assert np.all(np.isfinite(_expm1_base(ok, base)))
+
+    with pytest.raises(ValueError, match="too large to have been log-transformed"):
+        _expm1_base(np.array([0.0, limit * 1.01], dtype=dtype), base)
+
+
+def test_expm1_base_edge_cases() -> None:
+    # empty data (every feature stripped upstream) has no maximum to check
+    assert _expm1_base(np.array([], dtype="float32"), np.e).size == 0
+    # `base <= 1` is bounded by 1 for non-negative input, so the guard must not fire on it
+    np.testing.assert_allclose(_expm1_base(np.array([1e4], dtype="float32"), 1.0), [0.0])
+
+
 def test_calc_log2fc(pbmc68k: AnnData) -> None:
     # the arguments used to be swapped, so this exercised `data ** e`
     normcounts = get_raw_csr(pbmc68k).copy()

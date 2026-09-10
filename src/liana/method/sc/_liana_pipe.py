@@ -73,7 +73,7 @@ def _prepare_lr_stats(
     min_cells: int,
     base: float,
     de_method: DeMethod,
-    verbose: bool,
+    verbose: bool | None,
     use_raw: bool,
     layer: str | None,
     complex_cols: list[str],
@@ -197,7 +197,7 @@ def _add_proximity(
     adata: AnnData,
     spatial_key: str,
     spatial_kwargs: SpatialKwargs | None,
-    verbose: bool,
+    verbose: bool | None,
 ) -> pd.DataFrame:
     """Attach a per-cluster-pair spatial proximity weight to ``lr_res``.
 
@@ -231,7 +231,7 @@ def liana_pipe(
     de_method: DeMethod,
     n_perms: int | None,
     seed: int,
-    verbose: bool,
+    verbose: bool | None,
     use_raw: bool,
     n_jobs: int,
     layer: str | None,
@@ -341,7 +341,7 @@ def liana_pipe_consensus(
     de_method: DeMethod,
     n_perms: int | None,
     seed: int,
-    verbose: bool,
+    verbose: bool | None,
     use_raw: bool,
     n_jobs: int,
     layer: str | None,
@@ -474,7 +474,7 @@ def _get_lr(
     mat_max: np.float32 | None,
     de_method: DeMethod,
     base: float,
-    verbose: bool,
+    verbose: bool | None,
 ) -> pd.DataFrame:
     labels = get_obs(adata)[I.label].cat.categories
 
@@ -486,9 +486,9 @@ def _get_lr(
     logfc_flag = (M.ligand_logfc in relevant_cols) | (M.receptor_logfc in relevant_cols)
     if logfc_flag:
         if "log1p" in adata.uns_keys():
-            if (adata.uns["log1p"]["base"] is not None) & verbose:
+            if (adata.uns["log1p"]["base"] is not None) & bool(verbose):
                 print("Assuming that counts were `natural` log-normalized!")
-        elif ("log1p" not in adata.uns_keys()) & verbose:
+        elif ("log1p" not in adata.uns_keys()) & bool(verbose):
             print("Assuming that counts were `natural` log-normalized!")
         # `prep_check_adata` upstream guarantees a csr matrix.
         normcounts = _choose_mtx_rep(adata).copy()
@@ -587,6 +587,22 @@ def _calc_log2fc(adata: AnnData, label: str) -> np.ndarray:
 
 
 def _expm1_base(X: np.ndarray, base: float) -> np.ndarray:
+    """Invert a ``log1p``-in-``base`` transform, i.e. ``base ** X - 1``.
+
+    Raises
+    ------
+    ValueError
+        If the inversion would overflow, which means `X` was never log-transformed in `base`.
+    """
+    # `base ** x` is monotonic, so the largest entry decides whether anything overflows.
+    # `base <= 1` cannot overflow for non-negative `X`.
+    if X.size and base > 1:
+        limit = np.log(np.finfo(np.result_type(base, X.dtype)).max) / np.log(base)
+        if (peak := float(X.max())) > limit:
+            raise ValueError(
+                f"mat contains values too large to have been log-transformed (maximum: {peak:.6g}). "
+                "Pass log-normalised counts via `use_raw=True`, `layer=...`, or place them in `.X`."
+            )
     return np.asarray(np.power(base, X) - 1)
 
 
@@ -603,7 +619,7 @@ def _run_method(
     seed: int,
     return_all_lrs: bool,
     n_jobs: int,
-    verbose: bool,
+    verbose: bool | None,
     _aggregate_flag: bool = False,  # relevant for rank_aggregate
 ) -> pd.DataFrame:
     # re-assemble complexes - specific for each method

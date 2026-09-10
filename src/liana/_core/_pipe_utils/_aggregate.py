@@ -21,7 +21,7 @@ def _aggregate(
     aggregate_method: Literal["rra", "mean"] = "rra",
     _consensus_opts: list[str] | None = None,
     _key_cols: list[str] | None = None,
-    verbose: bool = False,
+    verbose: bool | None = False,
 ) -> pd.DataFrame:
     """
     Function to aggregate the results of all methods into a single DataFrame.
@@ -86,7 +86,7 @@ def _rank_aggregate(
     lr_res: pd.DataFrame,
     specs: dict[str, tuple[str, bool | None]],
     aggregate_method: Literal["rra", "mean"],
-    verbose: bool = False,
+    verbose: bool | None = False,
 ) -> NDArray[np.floating]:
     """
     Aggregate method ranks

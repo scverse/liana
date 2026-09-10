@@ -15,8 +15,10 @@ li.pl.dotplot_by_sample(adata, colour="magnitude_rank", size="specificity_rank",
                         inverse_colour=True, inverse_size=True, source_labels=sources, target_labels=targets)
 ```
 
-Any method has `.by_sample`. A sample whose cells all fall in one `groupby` level raises a
-ZeroDivisionError in the log-fold-change step; drop such samples.
+Only the single-cell methods and `rank_aggregate` have `.by_sample`; `li.mt.bivariate`, `inflow`,
+`lric` and `cross_pcf` do not, and calling it on them is an `AttributeError`. A sample whose cells
+all fall in one `groupby` level raises a `ValueError` naming the group in the log-fold-change step;
+drop such samples.
 
 ## 1. Targeted differential: pseudobulk DE, then LR table, then optional causal network
 

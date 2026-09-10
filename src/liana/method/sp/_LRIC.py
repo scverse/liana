@@ -45,7 +45,7 @@ _MIN_CELLS_FRAC = 0.01
 # ── helpers ───────────────────────────────────────────────────────────
 
 
-def _default_min_cells(adata: AnnData, min_cells: int | None, verbose: bool) -> int:
+def _default_min_cells(adata: AnnData, min_cells: int | None, verbose: bool | None) -> int:
     """Default ``min_cells`` to an abundance-relative threshold.
 
     ``None`` means "drop cell types making up no more than ``_MIN_CELLS_FRAC``
@@ -374,6 +374,7 @@ def _select_pairs(
     levels: list[str],
     groupby_pairs: pd.DataFrame | None,
     symmetric: bool,
+    verbose: bool | None,
 ) -> list[tuple[int, int]]:
     """Restrict cell-type index ``pairs`` to the combinations listed in ``groupby_pairs``.
 
@@ -388,7 +389,7 @@ def _select_pairs(
         _logg(
             f"`groupby_pairs` names cell types that are not in the data: {sorted(absent)}.",
             level="warn",
-            verbose=True,
+            verbose=verbose,
         )
     kept = [
         (s, r)
@@ -396,7 +397,7 @@ def _select_pairs(
         if (levels[s], levels[r]) in requested or (symmetric and (levels[r], levels[s]) in requested)
     ]
     if not kept:
-        _logg("`groupby_pairs` matched no cell-type pair; the result is empty.", level="warn", verbose=True)
+        _logg("`groupby_pairs` matched no cell-type pair; the result is empty.", level="warn", verbose=verbose)
     return kept
 
 
@@ -505,7 +506,7 @@ class CrossPCF:
         groupby_pairs: pd.DataFrame | None = V.groupby_pairs,
         key_added: str = "cross_pcf",
         inplace: bool = V.inplace,
-        verbose: bool = V.verbose,
+        verbose: bool | None = V.verbose,
     ) -> pd.DataFrame | None:
         """Cross pair-correlation function (cross-PCF) between cell types.
 
@@ -587,7 +588,7 @@ class CrossPCF:
         n_types = len(levels)
         # g(r) is symmetric in (sender, receiver) -- emit each unordered pair once
         pairs = [(s, r) for s in range(n_types) for r in range(s + 1, n_types)]
-        pairs = _select_pairs(pairs, levels, groupby_pairs, symmetric=True)
+        pairs = _select_pairs(pairs, levels, groupby_pairs, symmetric=True, verbose=verbose)
         _logg(
             f"Computing cross-PCF for {n_types} cell types ({len(pairs)} pairs).",
             verbose=verbose,
@@ -684,7 +685,7 @@ class LRIC:
         pair_chunk: int | None = None,
         key_added: str = "lric",
         inplace: bool = V.inplace,
-        verbose: bool = V.verbose,
+        verbose: bool | None = V.verbose,
     ) -> pd.DataFrame | None:
         """
 
@@ -872,7 +873,7 @@ class LRIC:
         nz_prop: float,
         lr_sep: str,
         transform_fn: Transform | None,
-        verbose: bool,
+        verbose: bool | None,
     ) -> pd.DataFrame:
         """Cell-type-agnostic LRIC across all cells (self-pairs excluded).
 
@@ -927,7 +928,7 @@ class LRIC:
         expr_prop: float,
         lr_sep: str,
         transform_fn: Transform | None,
-        verbose: bool,
+        verbose: bool | None,
     ) -> pd.DataFrame:
         """Cell-type pairwise ("ct") LRIC under the conditional (within-type) null.
 
@@ -951,7 +952,7 @@ class LRIC:
         obs_types, levels, codes, counts = _type_index(adata, groupby)
         n_types = len(levels)
         pairs = [(s, r) for s in range(n_types) for r in range(n_types) if s != r]
-        pairs = _select_pairs(pairs, levels, groupby_pairs, symmetric=False)
+        pairs = _select_pairs(pairs, levels, groupby_pairs, symmetric=False, verbose=verbose)
         _logg(
             f"Running LRIC (conditional within-type null) for {n_types} cell types ({len(pairs)} directed pairs).",
             verbose=verbose,

@@ -1,6 +1,6 @@
 ---
 name: liana
-description: Cell-cell communication (CCC) inference with the liana Python package (LIANA+, scverse). Use for any task involving liana or ligand-receptor (LR) analysis of AnnData/MuData objects. Triggers on steady-state LR scoring (rank_aggregate, CellPhoneDB, CellChat, NATMI, Connectome, SingleCellSignalR, logFC, scSeqComm); multi-sample or differential CCC (by_sample, MOFA+, Tensor-cell2cell, df_to_lr, pyCrossTalkeR); spatial CCC on Visium, Xenium, MERFISH, CosMx or slide-seq (spatial_neighbors, bivariate local/global metrics, Moran's R, Inflow, LRIC, cross-PCF, MISTy); multimodal CITE-seq or spatial metabolomics; metabolite-mediated CCC via MetalinksDB; LR resources and orthology for mouse or other organisms (consensus, mouseconsensus, OmniPath, HCOP); liana plots (dotplot, tileplot, circle_plot). Also use when the user says cell-cell interactions, crosstalk, signalling between cell types, sender and receiver, or niche signalling, even without naming liana. Not for MOFA+, MISTy or Tensor-cell2cell used outside liana.
+description: Cell-cell communication (CCC) inference with the liana Python package (LIANA+, scverse). Use for any task involving liana or ligand-receptor (LR) analysis of AnnData/MuData objects. Triggers on steady-state LR scoring (rank_aggregate, CellPhoneDB, CellChat, NATMI, Connectome, SingleCellSignalR, logFC, scSeqComm); multi-sample or differential CCC (by_sample, MOFA+, Tensor-cell2cell, df_to_lr, pyCrossTalkeR); spatial CCC on Visium, Xenium, MERFISH, CosMx or slide-seq (spatial_neighbors, bivariate local/global metrics, Moran's R, Inflow, LRIC, cross-PCF, MISTy); multimodal CITE-seq or spatial metabolomics; metabolite-mediated CCC via MetalinksDB; LR resources and orthology for mouse or other organisms (consensus, mouseconsensus, OmniPath, HCOP); liana plots (dotplot, tileplot, circle). Also use when the user says cell-cell interactions, crosstalk, signalling between cell types, sender and receiver, or niche signalling, even without naming liana.
 ---
 
 # liana (LIANA+)
@@ -82,16 +82,17 @@ metabolites, neurotransmitters, hormones or lipids, or has such a modality: read
 ## Facts that apply everywhere
 
 - **Input**: (typically) non-negative, library-size normalised, log1p expression in `.X` (or `layer=`).
-  `use_raw` defaults to `False`. Scaled or z-scored values give NaN `logfc` and NaN
-  `specificity_rank`, and negative values break the single-cell methods. Raw counts only trigger a warning.
+  `use_raw` defaults to `False`. The single-cell methods reject negative input with `ValueError: mat
+  contains negative values`, so scaled or z-scored values cannot be passed to them at all.
   Spatial methods with `x_transform`/`y_transform` (bivariate, MISTy) also accept scaled input.
 - **"Please check if appropriate organism/ID type was provided!"** means the resource and
   `var_names` do not overlap. Tell the user both causes: `var_names` that are not gene symbols
   (Ensembl IDs, the wrong matrix), and non-human data with the human `consensus` resource. For
   mouse use `resource_name="mouseconsensus"`; for a fuller map or any other organism translate
   the resource with HCOP orthologs (`li.rs.get_hcop_orthologs`, read `prior-knowledge.md`).
-- **Complexes**: subunits joined by `_`. `ligand` / `receptor` columns hold the least-expressed
-  subunit; `ligand_complex` / `receptor_complex` hold the full name.
+- **Complexes**: subunits joined by `_`. `ligand_complex` / `receptor_complex` hold the full name.
+  `ligand` / `receptor` hold the least-expressed subunit, but only in a single method's result --
+  `rank_aggregate` drops them, along with `*_means` and `*_props`.
 - **Where results land**: single-cell methods write `adata.uns["liana_res"]` in place;
   `bivariate` and `inflow` return a **new** AnnData; `lric`, `cross_pcf` and MISTy write `.uns` keys.
 - **Two thresholds**, both 0.05 by default and worth tuning: `expr_prop` (single-cell methods) is
@@ -101,7 +102,8 @@ metabolites, neurotransmitters, hormones or lipids, or has such a modality: read
 - Extras: MOFA, Tensor-cell2cell, pseudobulk DE, causal networks and MetalinksDB need
   `pip install 'liana[extras]'`. Before writing code for such a route, import the package it needs
   (`pydeseq2`, `decoupler`, `muon`, `cell2cell`, `corneto`) and, on ImportError, give the user that
-  command first. Downloads (`li.ds.kang_2018`, HCOP tables, MetalinksDB) go to the cwd.
+  command first. Downloads (`li.ds.kang_2018`, HCOP tables, MetalinksDB) are cached under
+  `scanpy.settings.datasetdir` (default `./data`); set `sc.settings.datasetdir` to redirect them.
 
 ## Citing
 

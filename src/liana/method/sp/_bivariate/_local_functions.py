@@ -9,6 +9,7 @@ from scipy.sparse import coo_matrix, csr_matrix
 from scipy.stats import norm, rankdata
 from tqdm import tqdm
 
+from liana._core._common import _logg
 from liana.method.sp._bivariate._global_functions import Weight
 
 if TYPE_CHECKING:
@@ -78,7 +79,7 @@ class LocalFunction:
         n_perms: int | None,
         seed: int,
         mask_negatives: bool,
-        verbose: bool,
+        verbose: bool | None,
     ) -> tuple[np.ndarray, np.ndarray | None]:
         """
         Function caller wrapper
@@ -140,6 +141,7 @@ class LocalFunction:
                 weight=norm_weight,
                 local_truth=local_scores,
                 mask_negatives=mask_negatives,
+                verbose=verbose,
             )
 
         return local_scores, local_pvals
@@ -156,7 +158,7 @@ class LocalFunction:
         n_perms: int,
         seed: int,
         mask_negatives: bool,
-        verbose: bool,
+        verbose: bool | None,
     ) -> np.ndarray:
         rng = np.random.default_rng(seed)
 
@@ -183,6 +185,7 @@ class LocalFunction:
         local_truth: np.ndarray,
         weight: Weight,
         mask_negatives: bool,
+        verbose: bool | None,
     ) -> np.ndarray:
         """
         Local Moran's R analytical p-values as in spatialDM (Li et al., 2022)
@@ -199,6 +202,7 @@ class LocalFunction:
             Connectivity weights
         mask_negatives
             Whether to mask negative correlations pvalue
+        %(verbose)s
 
         Returns
         -------
@@ -215,17 +219,29 @@ class LocalFunction:
         x_sigma = x_sigma * spot_n / (spot_n - 1)
         y_sigma = y_sigma * spot_n / (spot_n - 1)
 
-        std = self._get_local_var(x_sigma, y_sigma, weight, spot_n)
-        local_zscores = local_truth / std
+        std = self._get_local_std(x_sigma, y_sigma, weight, spot_n)
+        # a spot with no neighbours and no self-weight has a degenerate null: both the
+        # statistic and its standard deviation are 0, so the z-score is nan
+        isolated = int((std == 0).all(axis=1).sum())
+        if isolated:
+            _logg(
+                f"{isolated} spot(s) have no neighbours and no self-weight, so local Moran's R "
+                "has no null distribution there; their analytical p-values are nan. Lower "
+                "`cutoff`, raise `bandwidth`, or use `set_diag=True` in `li.pp.spatial_neighbors`.",
+                "warn",
+                verbose=verbose,
+            )
+        with np.errstate(invalid="ignore", divide="ignore"):
+            local_zscores = local_truth / std
 
         if mask_negatives:
             local_zpvals = norm.sf(local_zscores)
         else:
-            local_zpvals = norm.sf(np.abs(local_zscores))
+            local_zpvals = norm.sf(np.abs(local_zscores)) * 2
 
         return np.asarray(local_zpvals)
 
-    def _get_local_var(
+    def _get_local_std(
         self,
         x_sigma: np.ndarray,
         y_sigma: np.ndarray,
@@ -233,7 +249,18 @@ class LocalFunction:
         spot_n: int,
     ) -> np.ndarray:
         """
-        Spatial weight variance as in spatialDM (Li et al., 2022)
+        Null standard deviation of local Moran's R, as in spatialDM (Li et al., 2022)
+
+        For ``R_i = x_i (Wy)_i + y_i (Wx)_i`` with x, y i.i.d. and zero-mean, the null
+        variance is ``2 sigma_x^2 sigma_y^2 (sum_j w_ij^2 + w_ii^2)``.
+
+        Note this deviates from spatialDM, which hardcodes the ``w_ii`` contribution to 1
+        (``compute_var_local``'s ``wii`` argument, zeroed only when ``single_cell=True``).
+        That value assumes an unnormalised unit diagonal, but spatialDM normalises its
+        weights afterwards, so the assumed and actual diagonals disagree and the analytical
+        p-values come out far too conservative. We instead take ``w_ii`` from the weight
+        matrix itself, which is correct for any diagonal, including the zero diagonal
+        produced by ``spatial_neighbors``' default ``set_diag=False``.
 
         Parameters
         ----------
@@ -250,15 +277,18 @@ class LocalFunction:
         -------
         2D array of standard deviations with shape(n_spot, xy_n)
         """
-        dense = weight if isinstance(weight, np.ndarray) else np.asarray(weight.todense())
-
-        weight_sq = (dense**2).sum(axis=1)
+        # kept sparse; densifying the weights here costs O(n^2) and is infeasible at scale
+        if isinstance(weight, np.ndarray):
+            weight_sq = (weight**2).sum(axis=1)
+            diag = np.diagonal(weight)
+        else:
+            weight_sq = np.asarray(weight.multiply(weight).sum(axis=1)).ravel()
+            diag = weight.diagonal()
 
         dim = 2 * (spot_n - 1) ** 2 / spot_n**2
-        sigma_prod = x_sigma * y_sigma
-        core = dim * sigma_prod
+        core = dim * x_sigma**2 * y_sigma**2
 
-        var = np.multiply.outer(weight_sq, core) + core
+        var = np.multiply.outer(weight_sq + diag**2, core)
 
         return np.asarray(var**0.5)
 
@@ -459,7 +489,7 @@ _bivariate_functions = [
         name="product",
         metadata="simple weighted product",
         fun=_product,
-        reference="If vars are z-scaled = Lee's static (Lee 2021;J.Geograph.Syst.)",
+        reference="If vars are z-scaled = Lee's statistic (Lee 2001;J.Geograph.Syst.)",
     ),
     LocalFunction(
         name="norm_product",

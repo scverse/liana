@@ -11,7 +11,7 @@ _METALINKS_URL = "https://github.com/scverse/liana/releases/download/metalinksdb
 _METALINKS_HASH = "sha256:84df58e659cd0fe318b10f6d5d7ac1f16806b1088701fccf4260e78ba0982513"
 
 
-def _download_metalinksdb(cache_dir: str | Path | None = None, verbose: bool = True) -> Path:
+def _download_metalinksdb(cache_dir: str | Path | None = None, verbose: bool | None = True) -> Path:
     """
     Ensures the Metalinksdb is downloaded and available for use.
 
@@ -34,7 +34,7 @@ def _download_metalinksdb(cache_dir: str | Path | None = None, verbose: bool = T
             known_hash=_METALINKS_HASH,
             fname="metalinksdb.db",
             path=sc.settings.datasetdir if cache_dir is None else cache_dir,
-            progressbar=verbose,
+            progressbar=bool(verbose),
         )
     )
 

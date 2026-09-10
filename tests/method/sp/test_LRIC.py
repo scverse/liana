@@ -320,19 +320,19 @@ def test_cross_pcf_groupby_pairs(adata: AnnData) -> None:
     np.testing.assert_array_almost_equal(result["g"], unfiltered.loc[keep, "g"], decimal=6)
 
 
-def test_cross_pcf_groupby_pairs_unknown_type_warns(adata: AnnData, caplog: pytest.LogCaptureFixture) -> None:
+def test_cross_pcf_groupby_pairs_unknown_type_warns(adata: AnnData) -> None:
     # a typo'd cell type used to yield an empty frame and no explanation
-    result = as_frame(
-        cross_pcf(
-            adata,
-            groupby="cell_type",
-            inplace=False,
-            groupby_pairs=pd.DataFrame({"source": ["CD19+ Bee"], "target": ["CD34+"]}),
-            **_KWARGS,
+    with pytest.warns(UserWarning, match=r"not in the data.*CD19\+ Bee"):
+        result = as_frame(
+            cross_pcf(
+                adata,
+                groupby="cell_type",
+                inplace=False,
+                groupby_pairs=pd.DataFrame({"source": ["CD19+ Bee"], "target": ["CD34+"]}),
+                **_KWARGS,
+            )
         )
-    )
     assert result.empty
-    assert "not in the data" in caplog.text and "CD19+ Bee" in caplog.text
 
 
 def test_cross_pcf_inplace(adata_copy: AnnData) -> None:

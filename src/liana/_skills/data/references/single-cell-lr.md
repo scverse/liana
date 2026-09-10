@@ -8,7 +8,8 @@ Aim: rank LR interactions between cell types in one dataset. Tutorial: `basic_us
 import liana as li
 li.mt.rank_aggregate(adata, groupby="cell_type")
 adata.uns["liana_res"]   # long DataFrame, sorted by magnitude
-li.pl.dotplot(adata, colour="magnitude_rank", size="specificity_rank", inverse_colour=True, inverse_size=True, top_n=20)
+li.pl.dotplot(adata, colour="magnitude_rank", size="specificity_rank", inverse_colour=True,
+              inverse_size=True, top_n=20, orderby="magnitude_rank", orderby_ascending=True)
 ```
 
 Always show the top hits with `li.pl.dotplot` (arguments in `outputs-and-plotting.md`).
@@ -17,13 +18,15 @@ Always show the top hits with `li.pl.dotplot` (arguments in `outputs-and-plottin
 `geometric_mean`, `scseqcomm` share this exact signature. `li.mt.show_methods()` lists them with
 their score columns and references. `rank_aggregate` aggregates five of them (CellPhoneDB,
 Connectome, log2FC, NATMI, SingleCellSignalR) into `magnitude_rank` and `specificity_rank`, both
-"lower is better", and keeps every sub-method's own columns.
+"lower is better", plus each sub-method's own score columns. It drops the per-entity columns
+(`ligand`, `receptor`, `ligand_means`, `ligand_props`, ...) that a single method returns, so read
+`outputs-and-plotting.md` before plotting or filtering on them.
 
 | arg | default | note |
 |---|---|---|
 | `groupby` | required | `obs` column with cell types; groups with fewer than `min_cells=5` cells are dropped with a warning |
 | `expr_prop` | 0.05 | LR pairs whose ligand or receptor (any subunit) is expressed in fewer cells of the group are dropped. `return_all_lrs=True` keeps them with the worst observed score |
-| `n_perms` | 1000 | permutations for p-values. `None` skips them: no p-value columns, and `rank_aggregate` returns `magnitude_rank` only (asking for specificity then raises) |
+| `n_perms` | 1000 | permutations for p-values. `None` skips them: no p-value columns, and `rank_aggregate` aggregates `specificity_rank` from the permutation-free scores only |
 | `use_raw`, `layer` | False, None | which matrix; log1p-normalised, non-negative |
 | `resource_name`, `resource`, `interactions` | consensus | see prior-knowledge.md; `interactions=[("L","R"), ...]` overrides both others |
 | `groupby_pairs` | None | DataFrame with `source`, `target` columns: score only those cell-type pairs |
@@ -34,8 +37,8 @@ to this pair of cell types". Read `outputs-and-plotting.md` for the per-method c
 
 ## Footguns
 
-- Scaled data (or `.raw` holding scaled data) gives NaN `lr_logfc`, NaN `specificity_rank`, and
-  downstream `circle_plot` KeyErrors. Check `adata.X.min() >= 0` first.
+- Scaled data (or `.raw` holding scaled data) raises `ValueError: mat contains negative values`.
+  Check `adata.X.min() >= 0` first.
 - Missing dots in a dotplot are usually pairs filtered by `expr_prop`, not a bug.
 - The toy `li.ds.generate_toy_adata()` holds only variable genes, so a high "missing resource
   elements" fraction is expected there.

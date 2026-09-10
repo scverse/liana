@@ -27,9 +27,9 @@ from liana.method.sp import RandomForestModel, LinearModel, RobustLinearModel
 misty(model=RandomForestModel)                # or LinearModel / RobustLinearModel; bypass_intra=True for extra-only
 misty.uns["target_metrics"]   # per target: intra_R2, multi_R2, gain_R2, one contribution column per view
 misty.uns["interactions"]     # per view/predictor/target: importances
-li.pl.target_metrics(misty, stat="gain_R2", top_n=20)
-li.pl.contributions(misty)
-li.pl.interactions(misty, view="para", top_n=15, filter_fn=lambda d: d["importances"] > 0.5)
+li.pl.misty_target_metrics(misty, stat="gain_R2", top_n=20)
+li.pl.misty_contributions(misty)
+li.pl.misty_interactions(misty, view="para", top_n=15, filter_fn=lambda d: d["importances"] > 0.5)
 ```
 
 - `model` is a class, not an instance. Random forest importances are impurity decreases (always

@@ -19,7 +19,7 @@ only come from cells that express the ligand and receptor. Results land in `adat
 ## Radii and filters
 
 ```python
-li.pl.annulus_plot(adata)                                      # check the rings on the tissue first
+li.pl.annulus(adata)                                                     # check the rings on the tissue first
 li.mt.lric(adata, resource_name="mouseconsensus", groupby="cell_type")   # radii: max_radius, radius_step
 ```
 
@@ -39,7 +39,7 @@ li.mt.get_lric_auc(adata)            # per curve: score = mean log2 g over radii
 li.pl.lric_lineplot(adata, interaction="Apoe^Lrp1", source="Astro", target="Neuron")
 li.mt.get_lric_divergence(adata, feature_a={"source": "Astro", "target": "Neuron", "interaction": "Apoe^Lrp1"},
                           feature_b={"source": "Micro", "target": "Neuron", "interaction": "Apoe^Lrp1"})
-li.pl.lric_divergence_plot(adata, feature_a=feature_a, feature_b=feature_b)
+li.pl.lric_divergence(adata, feature_a=feature_a, feature_b=feature_b)
 ```
 
 `get_lric_auc` output columns match `li.pl.dotplot`. Divergence compares two curves selected by

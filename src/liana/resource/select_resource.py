@@ -85,7 +85,7 @@ def _handle_resource(
     resource_name: str | None = None,
     x_name: str = "ligand",
     y_name: str = "receptor",
-    verbose: bool = True,
+    verbose: bool | None = True,
 ) -> DataFrame:
     if interactions is None:
         if resource is None:

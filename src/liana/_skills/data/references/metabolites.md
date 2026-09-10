@@ -10,7 +10,7 @@ modality in a MuData and then run through the usual methods. Tutorials: `sc_mult
 
 ```python
 ml = li.rs.get_metalinks(tissue_location="Brain", biospecimen_location=["Blood", "Cerebrospinal Fluid"],
-                         source=["CellPhoneDB", "NeuronChat"], types=["lr", "pd"])   # downloads metalinksdb.db to cwd
+                         source=["CellPhoneDB", "NeuronChat"], types=["lr", "pd"])   # caches metalinksdb.db under sc.settings.datasetdir
 resource = ml[ml["type"] == "lr"][["metabolite", "gene_symbol"]].rename(columns={"metabolite": "source", "gene_symbol": "receptor"})
 pd_net = (ml[ml["type"] == "pd"].groupby(["metabolite", "gene_symbol"])["mor"].mean().reset_index()
             .rename(columns={"metabolite": "source", "gene_symbol": "target", "mor": "weight"}))
@@ -26,7 +26,8 @@ li.mt.rank_aggregate(meta, groupby="cell_type", resource=resource.rename(columns
 ```
 
 - `get_metalinks` filters are AND-combined; `li.rs.get_metalinks_values(table, column)` lists the
-  allowed values, `li.rs.describe_metalinks()` the schema. Needs `requests`.
+  allowed values, `li.rs.describe_metalinks()` the schema. Needs `pooch`; `cache_dir` overrides where
+  the database is cached.
 - `estimate_metalinks` needs `decoupler>=2`; extra kwargs (e.g. `tmin`) go to both the enzyme and
   transporter steps. It returns a MuData with modalities `metabolite` (signed activity scores) and
   `receptor`. Metabolites without a transporter entry are left unmasked.

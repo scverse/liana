@@ -107,7 +107,7 @@ class AggregateClass(MethodMeta):
         spatial_key: str | None = None,
         spatial_kwargs: SpatialKwargs | None = None,
         inplace: bool = V.inplace,
-        verbose: bool = V.verbose,
+        verbose: bool | None = V.verbose,
     ) -> DataFrame | dict[str, DataFrame] | None:
         """
         Get an aggregate of ligand-receptor scores from multiple methods.

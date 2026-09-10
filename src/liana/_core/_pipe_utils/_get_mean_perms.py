@@ -72,7 +72,7 @@ def _get_means_perms(
     aggregation: Aggregation,
     norm_factor: float | np.floating | None,
     n_jobs: int,
-    verbose: bool,
+    verbose: bool | None,
 ) -> NDArray[np.floating]:
     """
     Generate permutations and indices required for permutation-based methods
@@ -278,7 +278,7 @@ def _generate_perms_cube(
     seed: int,
     aggregation: Aggregation,
     n_jobs: int,
-    verbose: bool,
+    verbose: bool | None,
 ) -> NDArray[np.floating]:
     """Build the ``(n_perms, n_labels, n_genes)`` cube of per-label aggregates under the null.
 

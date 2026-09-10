@@ -22,7 +22,7 @@ def _make_view(
     layer: str | None = None,
     connecitivity: ObsmValue | None = None,
     spatial_key: str | None = None,
-    verbose: bool = False,
+    verbose: bool | None = False,
 ) -> AnnData:
 
     X = _choose_mtx_rep(adata=adata, use_raw=use_raw, layer=layer, verbose=verbose)
@@ -65,7 +65,7 @@ def genericMistyData(
     add_juxta: bool = True,
     n_neighs: int = 6,
     max_neighs: int = 18,
-    verbose: bool = False,
+    verbose: bool | None = False,
 ) -> MistyData:
     """
     Construct a MistyData object from an AnnData object with views as presented in the manuscript.
@@ -211,7 +211,7 @@ def lrMistyData(
     set_diag: bool = False,
     cutoff: float = 0.1,
     zoi: float = 0,
-    verbose: bool = False,
+    verbose: bool | None = False,
 ) -> MistyData:
     """
     Generate a MistyData object from an AnnData object in ligand-receptor format.
