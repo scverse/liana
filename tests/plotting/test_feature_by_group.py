@@ -43,6 +43,9 @@ def test_feature_by_group_raises(toy_spatial: AnnData) -> None:
     with pytest.raises(ValueError, match="'labels' must contain at least one label"):
         feature_by_group(adata=toy_spatial, groupby="bulk_labels", labels=[], feature="HES4")
 
+    with pytest.raises(KeyError, match="`not_a_column` not found in `adata.obs.columns`"):
+        feature_by_group(adata=toy_spatial, groupby="not_a_column", labels=["Dendritic"], feature="HES4")
+
     with pytest.raises(KeyError, match=r"`adata.obsm\['not_a_key'\]` not found"):
         feature_by_group(
             adata=toy_spatial, groupby="bulk_labels", labels=["Dendritic"], feature="HES4", spatial_key="not_a_key"

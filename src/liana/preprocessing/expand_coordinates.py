@@ -61,7 +61,9 @@ def expand_coordinates(
 
     samples = get_obs(adata)[sample_key]
     if isinstance(samples.dtype, pd.CategoricalDtype):
-        categories = list(samples.cat.categories)
+        # observed levels only -- a zero-observation category would give an empty `sample_coords`
+        # below (`min` of a zero-size array) and would also inflate the grid via `n_samples`
+        categories = list(samples.cat.remove_unused_categories().cat.categories)
     else:
         categories = list(pd.unique(samples))
     n_samples = len(categories)

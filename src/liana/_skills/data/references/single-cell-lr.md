@@ -18,9 +18,9 @@ Always show the top hits with `li.pl.dotplot` (arguments in `outputs-and-plottin
 `geometric_mean`, `scseqcomm` share this exact signature. `li.mt.show_methods()` lists them with
 their score columns and references. `rank_aggregate` aggregates five of them (CellPhoneDB,
 Connectome, log2FC, NATMI, SingleCellSignalR) into `magnitude_rank` and `specificity_rank`, both
-"lower is better", plus each sub-method's own score columns. It drops the per-entity columns
-(`ligand`, `receptor`, `ligand_means`, `ligand_props`, ...) that a single method returns, so read
-`outputs-and-plotting.md` before plotting or filtering on them.
+"lower is better", plus each sub-method's own score columns. It keeps the per-entity columns
+(`ligand`, `receptor`, `*_means`, `*_props`) that a single method returns, so the same plots and
+filters work on either; see `outputs-and-plotting.md`.
 
 | arg | default | note |
 |---|---|---|
@@ -39,6 +39,7 @@ to this pair of cell types". Read `outputs-and-plotting.md` for the per-method c
 
 - Scaled data (or `.raw` holding scaled data) raises `ValueError: mat contains negative values`.
   Check `adata.X.min() >= 0` first.
+- Raw counts are flagged, not silently scored: all-integral values or a maximum above 50 trigger a warning.
 - Missing dots in a dotplot are usually pairs filtered by `expr_prop`, not a bug.
 - The toy `li.ds.generate_toy_adata()` holds only variable genes, so a high "missing resource
   elements" fraction is expected there.

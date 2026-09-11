@@ -265,8 +265,7 @@ def liana_pipe(
     score
         The method to score the interactions with. `None` returns the ligand-receptor
         statistics without scoring them.
-    supp_columns
-        Additional columns to be added to the output of each method.
+    %(supp_columns)s
     %(return_all_lrs)s
     %(spatial_key)s
     %(spatial_kwargs)s
@@ -348,6 +347,7 @@ def liana_pipe_consensus(
     consensus: AggregateClass,
     consensus_opts: list[str] | Literal[False] | None = None,
     aggregate_method: Literal["rra", "mean"] = "rra",
+    supp_columns: list[str] | None = None,
     return_all_lrs: bool = False,
     spatial_key: str | None = None,
     spatial_kwargs: SpatialKwargs | None = None,
@@ -383,6 +383,7 @@ def liana_pipe_consensus(
         and `'Magnitude'`. `False` returns each method's results untouched.
     aggregate_method
         RobustRankAggregate (`'rra'`) or mean rank (`'mean'`).
+    %(supp_columns)s
     %(return_all_lrs)s
     %(spatial_key)s
     %(spatial_kwargs)s
@@ -393,7 +394,7 @@ def liana_pipe_consensus(
     A DataFrame of aggregated ligand-receptor results, or -- when `consensus_opts` is
     `False` -- a DataFrame per method, keyed by method name.
     """
-    add_cols = consensus.add_cols + _SUBUNIT_COLS
+    add_cols = consensus.add_cols + _SUBUNIT_COLS + (supp_columns or [])
 
     adata, lr_res = _prepare_lr_stats(
         adata=adata,
@@ -428,13 +429,18 @@ def liana_pipe_consensus(
             _score=method,
             _key_cols=P.primary,
             _complex_cols=method.complex_cols,
-            _add_cols=method.add_cols,
+            # `_SUBUNIT_COLS` carries the per-entity columns (`ligand`/`receptor` and their
+            # `props`) that the aggregate keeps alongside the scores, and `supp_columns` whatever
+            # else was asked for; without them `_run_method` narrows them away before `_aggregate`
+            # ever sees them
+            _add_cols=method.add_cols + _SUBUNIT_COLS + (supp_columns or []),
             n_perms=n_perms,
             seed=seed,
             return_all_lrs=return_all_lrs,
             n_jobs=n_jobs,
             verbose=verbose,
             _aggregate_flag=True,
+            _supp_columns=supp_columns,
         )
 
     if consensus_opts is False:
@@ -444,7 +450,11 @@ def liana_pipe_consensus(
         lrs,
         consensus=consensus,
         aggregate_method=aggregate_method,
-        _key_cols=P.primary,
+        # NB: keep the primary key. `ligand`/`receptor` must NOT join: complexes are reassembled
+        # per method (`_run_method`), so a method with a different `complex_cols` -- `cellchat`
+        # reduces by `*_trimean`, every other method by `*_means` -- can keep a different subunit
+        # of the same complex. Joining on them would split one interaction into two rows, each
+        # `NaN` in the other method's scores. They ride along as payload instead, leftmost wins.
         _consensus_opts=consensus_opts,
         verbose=verbose,
     )
@@ -621,6 +631,7 @@ def _run_method(
     n_jobs: int,
     verbose: bool | None,
     _aggregate_flag: bool = False,  # relevant for rank_aggregate
+    _supp_columns: list[str] | None = None,  # relevant for rank_aggregate
 ) -> pd.DataFrame:
     # re-assemble complexes - specific for each method
     lr_res = _filter_reassemble_complexes(
@@ -706,8 +717,16 @@ def _run_method(
             lr_res.loc[~lr_res[I.lrs_to_keep], _score.specificity] = fill_value
 
     score_cols = [name for name in (_score.magnitude, _score.specificity) if name is not None]
-    if _aggregate_flag:  # if consensus keep only the keys and the method scores
-        lr_res = lr_res[_key_cols + score_cols]
+    if _aggregate_flag:
+        # keep the keys, the per-entity statistics every method shares, whatever `supp_columns`
+        # asked for, and this method's scores, so that the methods' own intermediates
+        # (`*_zscores`, `*_means_sums`, `*_logfc`, `mat_mean`) stay out of the aggregate unless
+        # they were requested. Its column set and order still follow `methods=` -- `cellchat`
+        # contributes no `*_means`, and each method appends its own scores in turn.
+        keep = dict.fromkeys(
+            [*P.complete, C.ligand_means, C.receptor_means, C.ligand_props, C.receptor_props, *(_supp_columns or [])]
+        )
+        lr_res = lr_res[[col for col in keep if col in lr_res.columns] + score_cols]
     if _score.specificity is not None:  # when n_perms is None
         if lr_res[_score.specificity].isna().all():
             lr_res = lr_res.drop(_score.specificity, axis=1)

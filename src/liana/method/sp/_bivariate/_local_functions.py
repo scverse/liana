@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import numba as nb
 import numpy as np
-from scipy.sparse import coo_matrix, csr_matrix
+from scipy.sparse import csr_matrix
 from scipy.stats import norm, rankdata
 from tqdm import tqdm
 
@@ -220,14 +220,21 @@ class LocalFunction:
         y_sigma = y_sigma * spot_n / (spot_n - 1)
 
         std = self._get_local_std(x_sigma, y_sigma, weight, spot_n)
-        # a spot with no neighbours and no self-weight has a degenerate null: both the
-        # statistic and its standard deviation are 0, so the z-score is nan
-        isolated = int((std == 0).all(axis=1).sum())
-        if isolated:
+        # a zero null standard deviation leaves the z-score nan. Two conditions get there:
+        # a spot with no neighbours and no self-weight, or a constant variable (sigma == 0),
+        # which zeroes the variance of every spot at once -- the remedies differ, so say which
+        degenerate = int((std == 0).all(axis=1).sum())
+        if degenerate:
+            cause = (
+                "every x/y pair has a constant side (sigma == 0)"
+                if ((x_sigma == 0) | (y_sigma == 0)).all()
+                else "they have no neighbours and no self-weight -- lower `cutoff`, raise "
+                "`bandwidth`, or use `set_diag=True` in `li.pp.spatial_neighbors`"
+            )
             _logg(
-                f"{isolated} spot(s) have no neighbours and no self-weight, so local Moran's R "
-                "has no null distribution there; their analytical p-values are nan. Lower "
-                "`cutoff`, raise `bandwidth`, or use `set_diag=True` in `li.pp.spatial_neighbors`.",
+                f"{degenerate} spot(s) have a null standard deviation of 0 for every variable pair, "
+                f"so local Moran's R has no null distribution there and their analytical p-values "
+                f"are nan: {cause}.",
                 "warn",
                 verbose=verbose,
             )
@@ -252,7 +259,10 @@ class LocalFunction:
         Null standard deviation of local Moran's R, as in spatialDM (Li et al., 2022)
 
         For ``R_i = x_i (Wy)_i + y_i (Wx)_i`` with x, y i.i.d. and zero-mean, the null
-        variance is ``2 sigma_x^2 sigma_y^2 (sum_j w_ij^2 + w_ii^2)``.
+        variance is ``2 (n-1)^2/n^2 sigma_x^2 sigma_y^2 (sum_j w_ij^2 + w_ii^2)``
+        (Li et al., 2023, Supplementary Note 1, eq. 31), where ``sigma`` is the
+        ``n/(n-1)``-inflated population standard deviation ``_zscore_pvals`` passes in --
+        so the two ``n``-dependent factors leave a net ``n^2/(n-1)^2`` on the variance.
 
         Note this deviates from spatialDM, which hardcodes the ``w_ii`` contribution to 1
         (``compute_var_local``'s ``wii`` argument, zeroed only when ``single_cell=True``).
@@ -293,10 +303,14 @@ class LocalFunction:
         return np.asarray(var**0.5)
 
     def _norm_max(self, X: np.ndarray | csr_matrix, axis: int = 0) -> np.ndarray:
-        maxima = X.max(axis=axis)
-        dense_max = maxima.toarray() if isinstance(maxima, csr_matrix | coo_matrix) else maxima
-        zscored = _zscore(X / dense_max, axis=axis)
+        # NOTE: no max-scaling here. `_zscore` is scale- and shift-invariant, so dividing
+        # by the column max is a no-op for strictly positive data, but it flips the sign of
+        # every z-score for an all-negative column and yields inf/nan -- silently zeroed by
+        # the mapping below -- whenever the max is 0. `x_layer`/`y_layer` are public and
+        # `block_negatives` never runs on this path, so negatives do reach here.
+        zscored = _zscore(X, axis=axis)
 
+        # a genuinely constant column centres to 0 and divides by 0 -> nan
         return np.where(np.isnan(zscored), 0, zscored)
 
     @classmethod

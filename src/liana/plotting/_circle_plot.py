@@ -12,6 +12,7 @@ from matplotlib.axes import Axes
 
 from liana._core._constants import Keys as K
 from liana._core._docs import d
+from liana._core._pipe_utils._pre import _require_groupby
 from liana._core._types import RowFilter, get_obs
 from liana.plotting._common import _filter_by, _get_top_n, _invert_scores, _prep_liana_res
 
@@ -31,8 +32,6 @@ def _pivot_liana_res(
     elif mode == "mean":
         if score_key is None:
             raise ValueError("`score_key` must be provided when `mode='mean'`.")
-        if score_key is None:
-            raise ValueError("`score_key` must be provided!")
         pivot_table = liana_res.pivot_table(
             index=source_key, columns=target_key, values=score_key, aggfunc="mean", fill_value=0
         )
@@ -45,49 +44,43 @@ def _scale_list(arr: ArrayLike, min_val: float = 1, max_val: float = 5) -> NDArr
     arr_min = np.min(values)
     arr_max = np.max(values)
 
+    if arr_max == arr_min:
+        # a single value, or all-equal values, has no range to scale into; `0/0` would make
+        # every edge and node NaN, i.e. invisible - draw them at full size instead
+        return np.full(values.shape, float(max_val))
+
     scaled: NDArray[np.floating] = (values - arr_min) / (arr_max - arr_min) * (max_val - min_val) + min_val
     return scaled
 
 
-def _set_adata_color(
-    adata: AnnData,
-    label: str,
-    color_dict: dict[str, str] | None = None,
-    hex: bool = True,
-) -> AnnData:
-    obs = get_obs(adata)
-    obs[label] = obs[label].astype("category")
-    if color_dict:
-        if not hex:
-            from matplotlib.colors import to_hex
-
-            color_dict = {x: to_hex(y) for x, y in color_dict.items()}
-
-        _dt = _get_adata_colors(adata, label)
-        _dt.update(color_dict)
-        color_dict = _dt
-        adata.uns[f"{label}_colors"] = [color_dict[x] for x in obs[label].cat.categories]
-    else:
-        if f"{label}_colors" not in adata.uns:
-            # Handle both old (_set_default...) and new (set_default...) scanpy API
-            for candidate in ("_set_default_colors_for_categorical_obs", "set_default_colors_for_categorical_obs"):
-                _set_colors = getattr(sc.pl._utils, candidate, None)
-                if _set_colors is not None:
-                    _set_colors(adata, label)
-                    break
-            else:
-                raise AttributeError(
-                    "scanpy provides neither `_set_default_colors_for_categorical_obs` "
-                    "nor `set_default_colors_for_categorical_obs`."
-                )
-
-    return adata
-
-
 def _get_adata_colors(adata: AnnData, label: str) -> dict[str, str]:
-    if f"{label}_colors" not in adata.uns:
-        _set_adata_color(adata, label)
-    return dict(zip(get_obs(adata)[label].cat.categories, adata.uns[f"{label}_colors"], strict=False))
+    """``label``'s categories mapped to their colours, without mutating ``adata``.
+
+    `circle` is read-only on the caller's object, so neither the categorical conversion nor the
+    ``{label}_colors`` palette scanpy fills in may be written back to it -- both happen on a
+    throwaway `AnnData` carrying only ``label``.
+    """
+    obs = get_obs(adata)[[label]].copy()
+    obs[label] = obs[label].astype("category")
+    local = AnnData(obs=obs)
+    key = f"{label}_colors"
+
+    if key in adata.uns:
+        local.uns[key] = list(adata.uns[key])
+    else:
+        # Handle both old (_set_default...) and new (set_default...) scanpy API
+        for candidate in ("_set_default_colors_for_categorical_obs", "set_default_colors_for_categorical_obs"):
+            _set_colors = getattr(sc.pl._utils, candidate, None)
+            if _set_colors is not None:
+                _set_colors(local, label)
+                break
+        else:
+            raise AttributeError(
+                "scanpy provides neither `_set_default_colors_for_categorical_obs` "
+                "nor `set_default_colors_for_categorical_obs`."
+            )
+
+    return dict(zip(get_obs(local)[label].cat.categories, local.uns[key], strict=False))
 
 
 def get_mask_df(
@@ -226,7 +219,9 @@ def circle(
     Raises
     ------
     ValueError
-        If `groupby` is not provided
+        If `groupby` is not provided, or if no interactions remain after filtering and masking
+    KeyError
+        If `groupby` is not a column of `adata.obs`
 
     Examples
     --------
@@ -243,6 +238,7 @@ def circle(
     """
     if groupby is None:
         raise ValueError("`groupby` must be provided!")
+    _require_groupby(adata, groupby)
 
     liana_res = _prep_liana_res(
         adata=adata,
@@ -279,6 +275,12 @@ def circle(
     )
 
     G = nx.from_pandas_adjacency(_pivot_table, create_using=nx.DiGraph)
+    if G.number_of_edges() == 0:
+        # `_scale_list` would reduce the empty edge weights with `np.min([])`; there is no plot to draw
+        raise ValueError(
+            "No interactions remain to plot. Consider relaxing `filter_fn`, `top_n`, "
+            "`source_labels`/`target_labels` or `mask_mode`."
+        )
     pos = nx.circular_layout(G)
 
     edge_color = [groupby_colors[cell[0]] for cell in G.edges]

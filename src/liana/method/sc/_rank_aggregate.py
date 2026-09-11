@@ -91,6 +91,7 @@ class AggregateClass(MethodMeta):
         min_cells: int = V.min_cells,
         groupby_pairs: DataFrame | None = V.groupby_pairs,
         base: float = V.logbase,
+        supp_columns: list[str] | None = V.supp_columns,
         aggregate_method: Literal["rra", "mean"] = "rra",
         consensus_opts: list[str] | Literal[False] | None = None,
         return_all_lrs: bool = V.return_all_lrs,
@@ -121,6 +122,7 @@ class AggregateClass(MethodMeta):
         %(min_cells)s
         %(groupby_pairs)s
         %(base)s
+        %(supp_columns)s
         aggregate_method
             Method aggregation approach, one of ['mean', 'rra'], where `mean` represents the
             mean rank, while 'rra' is the RobustRankAggregate (Kolde et al., 2014)
@@ -177,6 +179,7 @@ class AggregateClass(MethodMeta):
             expr_prop=expr_prop,
             min_cells=min_cells,
             base=base,
+            supp_columns=supp_columns,
             return_all_lrs=return_all_lrs,
             de_method=de_method,
             verbose=verbose,

@@ -1,3 +1,4 @@
+import zlib
 from itertools import product
 from pathlib import Path
 
@@ -6,7 +7,16 @@ import pandas as pd
 import pooch
 import scanpy as sc
 
+from liana._core._common import _logg
+
 _HCOP_BASE = "https://storage.googleapis.com/public-download-files/hcop"
+
+# a truncated or otherwise unreadable (gzipped) table surfaces as one of these
+_READ_ERRORS = (OSError, EOFError, ValueError, UnicodeDecodeError, zlib.error)
+
+
+def _read_hcop(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path, sep="\t")
 
 
 def _replace_subunits(
@@ -134,10 +144,11 @@ def translate_column(
     if ["source", "target"] != map_df.columns.tolist():
         raise ValueError("The `map_df` DataFrame must have two columns named 'source' and 'target'!")
 
-    # get orthologs
+    # get orthologs; `dict.fromkeys` de-duplicates, as repeated source-target pairs
+    # would otherwise be counted as extra orthologs (and exceed `one_to_many`)
     map_df = map_df.set_index("source")
     map_dict: dict[str, str | list[str]] = {
-        str(source): list(targets) for source, targets in map_df.groupby(level=0)["target"]
+        str(source): list(dict.fromkeys(targets)) for source, targets in map_df.groupby(level=0)["target"]
     }
     map_data = _generate_orthologs(resource, column, map_dict, one_to_many)
 
@@ -207,6 +218,13 @@ def translate_resource(
     for column in columns:
         resource = translate_column(resource, map_df, column, replace=replace, one_to_many=one_to_many)
 
+    if resource.empty:
+        _logg(
+            "No interactions were translated. Check that the symbols in `map_df['source']` "
+            f"match those in {columns} (e.g. in case & organism).",
+            level="warn",
+        )
+
     return resource
 
 
@@ -245,6 +263,11 @@ def get_hcop_orthologs(
     mapping
         DataFrame with the HCOP mapping.
 
+    Raises
+    ------
+    OSError
+        If the (cached) file cannot be read, even after it was downloaded again.
+
     Notes
     -----
     HCOP is a composite database combining data from various orthology resources.
@@ -278,7 +301,32 @@ def get_hcop_orthologs(
         if not path.exists():
             pooch.retrieve(url, known_hash=None, fname=path.name, path=path.parent)
 
-    mapping = pd.read_csv(path, sep="\t")
+    # the cached file is not hash-checked (HCOP is re-released), so a truncated
+    # cache would otherwise be served unvalidated forever
+    try:
+        mapping = _read_hcop(path)
+    except _READ_ERRORS as read_error:
+        _logg(
+            f"`{path}` could not be read ({read_error}). Downloading it again.",
+            level="warn",
+        )
+        # download under a temporary name and only swap it in once it reads, so a failed
+        # retry (e.g. offline) leaves the old cache in place; the unlink is needed because
+        # `pooch.retrieve` serves an existing file untouched when `known_hash` is None
+        # the suffix is kept last so that `pandas` still infers the compression
+        tmp = path.with_suffix(".tmp" + path.suffix)
+        tmp.unlink(missing_ok=True)
+        try:
+            downloaded = Path(pooch.retrieve(url, known_hash=None, fname=tmp.name, path=path.parent))
+            mapping = _read_hcop(downloaded)
+        except _READ_ERRORS as retry_error:
+            tmp.unlink(missing_ok=True)
+            raise OSError(
+                f"`{path}` could not be read after downloading it again from {url}: {retry_error}. "
+                "Delete the file and check that the URL serves a gzipped, tab-separated HCOP table."
+            ) from retry_error
+        downloaded.replace(path)
+
     mapping["evidence"] = mapping["support"].apply(lambda x: len(x.split(",")))
     mapping = mapping[mapping["evidence"] >= min_evidence]
 

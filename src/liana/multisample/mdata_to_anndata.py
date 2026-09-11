@@ -4,10 +4,11 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import anndata as an
+import pandas as pd
 
 from liana._core._docs import d
 from liana._core._pipe_utils._pre import _choose_mtx_rep
-from liana._core._types import MatrixLike, copy_aligned, get_x
+from liana._core._types import MatrixLike, ObsmValue, copy_aligned, get_x
 
 if TYPE_CHECKING:
     from mudata import MuData
@@ -61,7 +62,8 @@ def mdata_to_anndata(
     Raises
     ------
     ValueError
-        If `x_mod` and/or `y_mod` are not provided.
+        If `x_mod` and/or `y_mod` are not provided, or if the two modalities do not cover the same
+        observations.
 
     Examples
     --------
@@ -75,11 +77,42 @@ def mdata_to_anndata(
     xdata = _handle_mod(mdata, x_mod, x_use_raw, x_layer, x_transform, verbose)
     ydata = _handle_mod(mdata, y_mod, y_use_raw, y_layer, y_transform, verbose)
 
+    # `an.concat(axis=1)` joins on the *intersection* of the observations, while `mdata.obs` -- assigned
+    # below -- is their union; a partial overlap therefore fails opaquely as a shape mismatch on `.obs`.
+    x_obs, y_obs = xdata.obs_names, ydata.obs_names
+    n_shared = len(x_obs.intersection(y_obs))
+    n_non_shared = len(x_obs.union(y_obs)) - n_shared
+    if n_non_shared:
+        raise ValueError(
+            f"`{x_mod}` and `{y_mod}` do not cover the same observations: {n_non_shared} of "
+            f"{n_shared + n_non_shared} observations are present in only one of them "
+            f"(`{x_mod}`: {xdata.n_obs}, `{y_mod}`: {ydata.n_obs}, shared: {n_shared}). "
+            "Subset both modalities to their shared observations before calling `mdata_to_anndata`."
+        )
+
     adata = an.concat([xdata, ydata], axis=1, label="modality")
 
-    adata.obs = mdata.obs.copy()
+    # `an.concat` returns the observations in `x_mod`'s order, which need not be `mdata`'s. Assigning
+    # `mdata.obs` wholesale would overwrite `obs_names` with a differently-ordered index, i.e. label
+    # every cell with another cell's metadata; `obsm`/`obsp` are assigned positionally and misalign
+    # the same way. Both are therefore reordered onto `adata`'s observations.
+    adata.obs = mdata.obs.reindex(adata.obs_names).copy()
     adata.uns = dict(mdata.uns)
-    copy_aligned(adata, obsm=dict(mdata.obsm), obsp=dict(mdata.obsp))
+    idx = mdata.obs_names.get_indexer(adata.obs_names)
+    if (idx < 0).any():
+        raise ValueError("Some observations of the two modalities are absent from `mdata.obs_names`.")
+
+    def _take(value: ObsmValue, *, both_axes: bool = False) -> ObsmValue:
+        """Reorder ``value``'s rows -- and, for the square `obsp` entries, its columns -- by ``idx``."""
+        if isinstance(value, pd.DataFrame):
+            return value.iloc[idx, idx] if both_axes else value.iloc[idx]
+        return value[idx][:, idx] if both_axes else value[idx]
+
+    copy_aligned(
+        adata,
+        obsm={key: _take(value) for key, value in mdata.obsm.items()},
+        obsp={key: _take(value, both_axes=True) for key, value in mdata.obsp.items()},
+    )
 
     return adata
 

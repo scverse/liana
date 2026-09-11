@@ -1,10 +1,11 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 import pytest
 from scipy.sparse import csr_matrix
 
-from liana.method.sp._bivariate._global_functions import _global_r
+from liana.method.sp._bivariate._global_functions import GlobalFunction, _global_r
 from liana.method.sp._bivariate._local_functions import (
     LocalFunction,
     LocalStat,
@@ -165,21 +166,12 @@ def test_global_permutation_pvals(pval_mats: SimpleNamespace) -> None:
     assert pvals.shape == (10,)
 
 
-def _lee_closed_form(x: np.ndarray, y: np.ndarray, w: np.ndarray) -> float:
-    """Lee's L straight from its definition (Lee 2001, J. Geograph. Syst.).
-
-    Deliberately written with spatial lags rather than a `W`-product, so it is
-    independent of whether the implementation uses ``W @ W`` or ``W.T @ W``.
-    """
-    zx = (x - x.mean()) / x.std()
-    zy = (y - y.mean()) / y.std()
-    return float((w @ zx * (w @ zy)).sum() / (w.sum(axis=1) ** 2).sum())
-
-
 def test_lee_matches_closed_form_on_asymmetric_weight() -> None:
-    """Global Lee's L needs ``W.T @ W``; ``W @ W`` silently agrees only for symmetric W."""
-    from liana.method.sp._bivariate._global_functions import _lee_stat
+    """Global Lee's L needs ``W.T @ W``; ``W @ W`` silently agrees only for symmetric W.
 
+    Called through ``GlobalFunction.__call__`` on purpose: the operator lives there,
+    not in ``_lee_stat``, so pinning the statistic alone leaves the fix untested.
+    """
     rng = np.random.default_rng(0)
     n = 40
     # a k-NN style weight: every row keeps 5 random off-diagonal entries -> asymmetric
@@ -189,64 +181,77 @@ def test_lee_matches_closed_form_on_asymmetric_weight() -> None:
         dense[i, nbrs] = rng.uniform(0.1, 1.0, size=5)
     assert np.abs(dense - dense.T).sum() > 0, "fixture must be asymmetric"
 
-    weight = csr_matrix(dense)
     x = rng.normal(size=(n, 1))
     y = rng.normal(size=(n, 1))
+    xy_stats = pd.DataFrame(index=[0])
+    GlobalFunction.instances["lee"](
+        xy_stats=xy_stats,
+        x_mat=x,
+        y_mat=y,
+        weight=csr_matrix(dense),
+        seed=0,
+        n_perms=None,
+        mask_negatives=False,
+        verbose=False,
+    )
+
+    # Lee's L (2001, eq. 18): z_y^T W^T W z_x / 1^T W^T W 1, over the same z-scores
+    # `__call__` takes -- `_zscore`'s population std
     zx = (x - x.mean(0)) / x.std(0)
     zy = (y - y.mean(0)) / y.std(0)
 
-    expected = _lee_closed_form(x[:, 0], y[:, 0], dense)
-    actual = _lee_stat(zx, zy, csr_matrix(weight.T @ weight))[0]
-    np.testing.assert_allclose(actual, expected, rtol=1e-10)
+    def _closed_form(W: np.ndarray) -> float:
+        return float(((W @ zx) * zy).sum() / W.sum())
 
-    # guard the regression: the old operator disagrees on an asymmetric weight
-    wrong = _lee_stat(zx, zy, weight * weight)[0]
-    assert abs(wrong - expected) > 1e-6
+    np.testing.assert_allclose(xy_stats["lee"].to_numpy()[0], _closed_form(dense.T @ dense), rtol=1e-10)
+    # what makes the pin above discriminating: on this fixture the two operators
+    # disagree, so a revert to `W @ W` fails it (on a symmetric W it would not)
+    assert abs(_closed_form(dense @ dense) - _closed_form(dense.T @ dense)) > 1e-6
 
 
-def test_local_std_has_no_constant_offset() -> None:
-    """The local Moran's R null variance is ``2 s_x^2 s_y^2 (sum_j w_ij^2 + w_ii^2)``.
+@pytest.mark.parametrize("set_diag", [False, True])
+def test_local_std_matches_a_permutation_null(set_diag: bool) -> None:
+    """The analytical null std must match the spread of the statistic under permutation.
 
-    spatialDM adds a further ``w_ii``-independent constant (its hardcoded ``wii=1``),
-    which makes the analytical p-values far too conservative once the weights are
-    normalised. Assert the variance is purely proportional to the weight row sums.
+    The only shape of test that can catch a wrong variance -- an expression mirroring
+    the code cannot. The closed form ``2 (n-1)^2/n^2 s_x^2 s_y^2 (sum_j w_ij^2 + w_ii^2)``
+    (``s`` being the ``n/(n-1)``-inflated population std `_zscore_pvals` passes in) is
+    compared against the empirical std of ``R_i = x_i(Wy)_i + y_i(Wx)_i`` under
+    INDEPENDENT permutations of x and y -- the independence the closed form assumes,
+    unlike `_permutation_pvals`, which reuses one index for both.
+
+    Compared as a median over spots and variable pairs: a single spot's empirical std
+    carries ~3% Monte-Carlo error, the median far less. The 5% tolerance also absorbs
+    the ~2% by which the closed form runs high here -- it treats the permuted values as
+    i.i.d. and so drops a finite-population term of order ``neighbours / (n - 1)``.
+    A factor-2 error (41%) or a dropped ``w_ii^2`` (16% with the diagonal below) is
+    nowhere near that.
     """
     local_morans = LocalFunction._get_instance("morans")
     rng = np.random.default_rng(0)
-    n = 30
-    dense = rng.uniform(size=(n, n))
-    np.fill_diagonal(dense, 0.0)
+    n, k, n_pairs, n_perms = 200, 4, 2, 500
 
-    sigma = np.array([1.0, 2.0])
-    std = local_morans._get_local_std(sigma, sigma, csr_matrix(dense), n)
+    # a k-NN style weight: exactly `k` neighbours each, so no spot has a degenerate null
+    weight = np.zeros((n, n))
+    for i in range(n):
+        weight[i, rng.choice([j for j in range(n) if j != i], size=k, replace=False)] = rng.uniform(0.1, 1.0, size=k)
+    # `set_diag=True` in `li.pp.spatial_neighbors` puts the kernel at distance 0 -- i.e. 1
+    np.fill_diagonal(weight, 1.0 if set_diag else 0.0)
 
-    dim = 2 * (n - 1) ** 2 / n**2
-    expected = np.sqrt(np.multiply.outer((dense**2).sum(axis=1), dim * sigma**2 * sigma**2))
-    np.testing.assert_allclose(std, expected, rtol=1e-10)
+    x = rng.normal(size=(n, n_pairs)) * np.array([1.0, 3.0])  # unequal scales across pairs
+    y = rng.normal(size=(n, n_pairs))
+    x, y = x - x.mean(0), y - y.mean(0)  # the statistic's null assumes zero mean
 
-    # doubling the weights must scale the std by exactly 2; a constant offset would break this
-    doubled = local_morans._get_local_std(sigma, sigma, csr_matrix(2 * dense), n)
-    np.testing.assert_allclose(doubled, 2 * std, rtol=1e-10)
+    stats = np.empty((n_perms, n, n_pairs))
+    for p in range(n_perms):
+        xp, yp = x[rng.permutation(n)], y[rng.permutation(n)]
+        stats[p] = xp * (weight @ yp) + yp * (weight @ xp)
 
+    # `_zscore_pvals` fits sigma with `norm.fit` (the ddof=0 MLE) and inflates by n/(n-1)
+    sigma = [v.std(axis=0) * n / (n - 1) for v in (x, y)]
+    analytical = local_morans._get_local_std(sigma[0], sigma[1], weight, n)
 
-def test_local_std_uses_the_weight_diagonal() -> None:
-    """A non-zero diagonal (``set_diag=True``) must contribute ``w_ii**2``."""
-    local_morans = LocalFunction._get_instance("morans")
-    rng = np.random.default_rng(1)
-    n = 25
-    dense = rng.uniform(size=(n, n))
-    np.fill_diagonal(dense, 0.0)
-    sigma = np.array([1.0])
-
-    zero_diag = local_morans._get_local_std(sigma, sigma, csr_matrix(dense), n)
-    with_diag = dense.copy()
-    np.fill_diagonal(with_diag, 0.7)
-    non_zero = local_morans._get_local_std(sigma, sigma, csr_matrix(with_diag), n)
-
-    dim = 2 * (n - 1) ** 2 / n**2
-    # variance gains exactly 2 * w_ii**2 (once from sum_j w_ij**2, once from the w_ii**2 term)
-    gain = np.multiply.outer(np.repeat(2 * 0.7**2, n), dim * sigma**2 * sigma**2)
-    np.testing.assert_allclose(non_zero**2, zero_diag**2 + gain, rtol=1e-10)
+    np.testing.assert_allclose(np.median(stats.std(axis=0) / analytical), 1.0, rtol=0.05)
 
 
 def test_local_std_sparse_matches_dense() -> None:
@@ -279,3 +284,47 @@ def test_local_analytical_pvals_are_two_sided(pval_mats: SimpleNamespace) -> Non
         verbose=False,
     )
     np.testing.assert_allclose(actual, 1.0, rtol=1e-10)
+
+
+# ── `_norm_max` ─────────────────────────────────────────────────────────────
+
+# col 0: strictly positive -- max-scaling was a no-op here (why the morans pins hold)
+# col 1: all-negative -- max-scaling used to flip the sign of every z-score
+# col 2: max == 0 -- max-scaling produced inf/nan, silently zeroing the column
+_MAT = np.array(
+    [
+        [1.0, -1.0, 0.0],
+        [2.0, -2.0, 0.0],
+        [3.0, -3.0, -1.0],
+    ]
+)
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+def test_norm_max_is_scale_invariant_and_keeps_sign(sparse: bool) -> None:
+    """`_norm_max` must not divide by the column max (all-negative flips, max==0 zeroes)."""
+    fun = LocalFunction._get_instance("morans")
+    X = csr_matrix(_MAT) if sparse else _MAT
+
+    actual = fun._norm_max(X)
+
+    assert isinstance(actual, np.ndarray)
+    assert actual.shape == _MAT.shape
+
+    expected = np.array(
+        [
+            [-1.22474487, 1.22474487, 0.70710678],
+            [0.0, 0.0, 0.70710678],
+            [1.22474487, -1.22474487, -1.41421356],
+        ]
+    )
+    np.testing.assert_almost_equal(actual, expected, decimal=6)
+
+
+def test_norm_max_maps_constant_column_to_zero() -> None:
+    """A genuinely constant column has no z-score; the nan->0 mapping must survive."""
+    fun = LocalFunction._get_instance("morans")
+
+    actual = fun._norm_max(np.array([[5.0], [5.0], [5.0]]))
+
+    np.testing.assert_array_equal(actual, np.zeros((3, 1)))

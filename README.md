@@ -3,7 +3,7 @@
 <!-- badges: start -->
 [![main](https://github.com/scverse/liana/actions/workflows/test.yaml/badge.svg)](https://github.com/scverse/liana/actions)
 [![GitHub issues](https://img.shields.io/github/issues/scverse/liana.svg)](https://github.com/scverse/liana/issues/)
-[![Documentation Status](https://readthedocs.org/projects/liana-py/badge/?version=latest)](https://liana-py.readthedocs.io/en/latest/?badge=latest)
+[![Documentation Status](https://readthedocs.org/projects/liana/badge/?version=latest)](https://liana.readthedocs.io/en/latest/?badge=latest)
 [![codecov](https://codecov.io/gh/scverse/liana/graph/badge.svg?token=2HvdhecFQU)](https://codecov.io/gh/scverse/liana)
 [![Downloads](https://static.pepy.tech/badge/liana)](https://pepy.tech/project/liana)
 <!-- badges: end -->

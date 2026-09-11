@@ -91,6 +91,10 @@ _resource_name = """\
 resource_name
     Name of the resource to be used for ligand-receptor inference. See `li.rs.show_resources()` for available resources."""
 
+_db_path = """\
+db_path
+    Path to the SQLite database file. If None, the database is fetched into `scanpy.settings.datasetdir` and reused from there."""
+
 _sample_key = """\
 sample_key
     key in `adata.obs` to use for grouping by sample or context."""
@@ -169,6 +173,12 @@ return_all_lrs
     Bool whether to return all ligand-receptor pairs, or only those that surpass the `expr_prop`
     threshold. Ligand-receptor pairs that do not pass the `expr_prop` threshold will be assigned
     to the *worst* score of the ones that do. `False` by default."""
+
+_supp_columns = """\
+supp_columns
+    Additional columns to be added from any of the methods implemented in liana,
+    or any of the columns returned by `scanpy.tl.rank_genes_groups`, each starting with ligand_* or receptor_*.
+    For example, `['ligand_pvals', 'receptor_pvals']`. None by default."""
 
 _de_method = """\
 de_method
@@ -409,6 +419,7 @@ d = DocstringProcessor(
     resource=_resource,
     interactions=_interactions,
     resource_name=_resource_name,
+    db_path=_db_path,
     sample_key=_sample_key,
     key_added=_key_added,
     use_raw=_use_raw,
@@ -424,6 +435,7 @@ d = DocstringProcessor(
     min_cells=_min_cells,
     base=_base,
     return_all_lrs=_return_all_lrs,
+    supp_columns=_supp_columns,
     liana_res=_liana_res,
     de_method=_de_method,
     source_key=_source_key,

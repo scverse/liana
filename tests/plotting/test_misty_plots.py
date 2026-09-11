@@ -1,5 +1,6 @@
 from contextlib import suppress
 
+import numpy as np
 import pandas as pd
 import pytest
 from anndata import AnnData
@@ -84,6 +85,24 @@ def test_interactions_plot(misty: MistyData, interactions: DataFrame) -> None:
     assert plot_data.shape[0] == 3
 
     assert pl.misty_interactions(misty=misty, view="extra", return_fig=False) is None
+
+
+def test_interactions_plot_top_n_is_pairwise() -> None:
+    # the best pair per target, plus fillers: `top_n` must keep the top (target, predictor)
+    # PAIRS, not the cross product of the top targets and the top predictors
+    interactions = pd.DataFrame(
+        {
+            "target": np.repeat(["a", "b", "c"], 3),
+            "predictor": np.tile(["x", "y", "z"], 3),
+            "view": "extra",
+            "importances": [0.9, 0.1, 0.1, 0.1, 0.8, 0.1, 0.1, 0.1, 0.7],
+        }
+    )
+
+    plot_data = _frame(pl.misty_interactions(interactions=interactions, view="extra", top_n=3, ascending=False))
+    pairs = plot_data[["target", "predictor"]].drop_duplicates()
+    assert pairs.shape[0] == 3
+    assert set(map(tuple, pairs.to_numpy())) == {("a", "x"), ("b", "y"), ("c", "z")}
 
 
 def test_target_metrics_aggregate(target_metrics: DataFrame) -> None:

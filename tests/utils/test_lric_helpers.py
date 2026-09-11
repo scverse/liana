@@ -62,6 +62,30 @@ def test_get_lric_auc_liana_res(adata: AnnData) -> None:
         get_lric_auc()
 
 
+def test_get_lric_auc_stacked_results_raise(adata: AnnData) -> None:
+    base = adata.uns["lric_ag"]
+    res = pd.concat([base.assign(sample="a"), base.assign(sample="b")], ignore_index=True)
+
+    with pytest.raises(ValueError, match=r"\['sample'\] take more than one value"):
+        get_lric_auc(liana_res=res, min_bins=2)
+    # one sample at a time is unambiguous and scores as before
+    one = get_lric_auc(liana_res=res[res["sample"] == "a"].drop(columns="sample"), min_bins=2)
+    assert one.equals(get_lric_auc(liana_res=base, min_bins=2))
+
+    # two samples on DISJOINT radius grids share no (ids, radius) key at all, so a
+    # duplicate-key guard waved them through and their curves interleaved into one row
+    curve = pd.DataFrame({"interaction": ["a^b"] * 3, "g": [0.5, 1.0, 2.0]})
+    disjoint = pd.concat(
+        [
+            curve.assign(radius=[10.0, 20.0, 30.0], condition="ctrl"),
+            curve.assign(radius=[15.0, 25.0, 35.0], condition="stim"),
+        ],
+        ignore_index=True,
+    )
+    with pytest.raises(ValueError, match=r"\['condition'\] take more than one value"):
+        get_lric_auc(liana_res=disjoint, min_bins=2)
+
+
 def test_min_bins_gates_out_everything(adata: AnnData) -> None:
     # more bins required than exist in the window -> empty, but well-formed
     df = get_lric_auc(adata, "cross_pcf", max_dist=25, min_bins=99)

@@ -11,6 +11,7 @@ from liana._core._common import _logg
 from liana._core._constants import DefaultValues as V
 from liana._core._constants import Keys as K
 from liana._core._docs import d
+from liana._core._pipe_utils._pre import _require_groupby
 from liana._core._types import get_coordinates, get_obs, get_x
 
 if TYPE_CHECKING:
@@ -88,6 +89,7 @@ def feature_by_group(
         raise ValueError("`feature` must be provided.")
     if labels is None or len(labels) == 0:
         raise ValueError(f"'labels' must contain at least one label from '{groupby}', got: {labels}")
+    _require_groupby(adata, groupby)
 
     # Default colormaps if not provided
     default_cmaps = ["Blues", "Reds", "Greens", "Purples", "Oranges", "YlOrBr", "PuRd", "BuGn", "GnBu", "OrRd"]

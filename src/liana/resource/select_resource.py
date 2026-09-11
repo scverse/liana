@@ -87,6 +87,7 @@ def _handle_resource(
     y_name: str = "receptor",
     verbose: bool | None = True,
 ) -> DataFrame:
+    passed = "interactions" if interactions is not None else "resource" if resource is not None else "resource_name"
     if interactions is None:
         if resource is None:
             if resource_name is None:
@@ -111,5 +112,11 @@ def _handle_resource(
         if any(len(item) != 2 for item in interactions):
             raise ValueError("'interactions' should be a list of tuples in the format [(x1, y1), (x2, y2), ...].")
         resource = DataFrame(set(interactions), columns=[x_name, y_name])
+
+    # an empty resource would otherwise fail downstream as a `UFuncTypeError`
+    if resource.empty:
+        raise ValueError(
+            f"The resource is empty. Check that the `{passed}` passed yields at least one '{x_name}'-'{y_name}' pair."
+        )
 
     return resource

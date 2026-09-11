@@ -45,7 +45,7 @@ def test_describe_metalinks(metalinks_db: str) -> None:
 def test_metalinks_resolves_db_when_no_path_given(
     monkeypatch: pytest.MonkeyPatch, download_cache: pathlib.Path, metalinks_db: str
 ) -> None:
-    """Omitting `db_path` falls back to the database in the working directory."""
+    """Omitting `db_path` fetches the database into `scanpy.settings.datasetdir` and reuses it from there."""
     monkeypatch.chdir(download_cache)
 
     pd.testing.assert_frame_equal(

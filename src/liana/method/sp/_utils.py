@@ -6,7 +6,7 @@ import numpy as np
 from anndata import AnnData
 from mudata import MuData
 from pandas import DataFrame, Series
-from scipy.sparse import coo_matrix, csr_matrix, hstack, isspmatrix_csr
+from scipy.sparse import csr_matrix, hstack, isspmatrix_csr
 
 from liana._core._constants import DefaultValues as V
 from liana._core._pipe_utils import prep_check_adata
@@ -52,8 +52,9 @@ def _add_complexes_to_var(
     return combined
 
 
-# `_norm_max` passes `csr / ndarray`, which scipy returns as a coo matrix
-type _ZScoreInput = np.ndarray | csr_matrix | coo_matrix
+# the x/y feature matrices reach here straight off `.X`, so still sparse; `mat.mean(axis)`
+# returns a dense matrix, so everything downstream of the centring is dense either way
+type _ZScoreInput = np.ndarray | csr_matrix
 
 
 def _zscore(mat: _ZScoreInput, axis: int = 0, global_r: bool = False) -> np.ndarray:

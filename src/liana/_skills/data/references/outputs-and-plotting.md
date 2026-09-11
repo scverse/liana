@@ -6,8 +6,10 @@
 type and LR pair. **A single method** (`li.mt.cellphonedb`, `natmi`, ...) gives `source`, `target`,
 `ligand_complex`, `receptor_complex`, `ligand`, `receptor` (the least-expressed subunit),
 `ligand_means`, `ligand_props`, `receptor_means`, `receptor_props`, then its score columns.
-**`rank_aggregate` keeps only the four key columns and the score columns** -- none of the per-entity
-`ligand` / `receptor` / `*_means` / `*_props` ones -- so run a single method when you need those.
+**`rank_aggregate`** gives those same key and per-entity columns, then each aggregated method's
+score columns plus `magnitude_rank` and `specificity_rank`. It does not carry the per-entity
+intermediates only one method computes (`ligand_zscores`, `ligand_logfc`, `ligand_means_sums`)
+unless `supp_columns=` asks for them, as with a single method.
 `by_sample` adds a column named after `sample_key`.
 
 | method | magnitude | specificity | lower is better |
@@ -46,8 +48,8 @@ li.pl.dotplot(adata, colour="magnitude_rank", size="specificity_rank",
 - `source_labels` / `target_labels` raise if a label is absent.
 - `li.pl.tileplot(adata, fill="means", label="props", ...)`: `fill` and `label` are suffixes that must
   exist as both `ligand_<x>` and `receptor_<x>` columns (e.g. `means`, `props`, or a `df_to_lr` stat).
-  Needs a single method's result: on `rank_aggregate` output it raises ``ValueError: `means` (fill)
-  must be one of ...``, listing the pivoted columns rather than naming the cause.
+  Works on a single method's result and on `rank_aggregate`'s; a suffix neither carries raises
+  ``ValueError: `means` (fill) must be one of ...``, listing the pivoted columns.
 - `li.pl.circle(adata, groupby="cell_type", score_key="magnitude_rank", inverse_score=True,
   pivot_mode="counts"|"mean")` draws a cell-type network (matplotlib `Axes`).
 - `li.pl.dotplot_by_sample(adata, sample_key="sample", colour=..., size=...)` facets interaction by

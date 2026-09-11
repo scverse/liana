@@ -38,13 +38,15 @@ for c in a.obs.columns:
     if a.obs[c].dtype.kind not in "biuf":
         u = a.obs[c].unique()
         print(c, len(u), list(u[:6]))
-print("obsm:", list(a.obsm), "obsp:", list(a.obsp), "layers:", list(a.layers), "uns:", list(a.uns))
+print("obsm:", list(a.obsm), "obsp:", list(a.obsp), "uns:", list(a.uns))
 d = lambda M: M.toarray() if hasattr(M, "toarray") else np.asarray(M)
-X = d(a.X[:200])
-print("X min/max:", X.min(), X.max(), "integer-like:", np.allclose(X, X.round()), "var sample:", list(a.var_names[:5]))
-if a.raw is not None:
-    R = d(a.raw.X[:200])
-    print("raw min/max:", R.min(), R.max(), "(negative = scaled, do not use)")
+for name, m in (a.mod.items() if hasattr(a, "mod") else [("", a)]):   # a MuData has no .X or .layers
+    X = d(m.X[:200])
+    print(name, "layers:", list(m.layers), "X min/max:", X.min(), X.max(),
+          "integer-like:", np.allclose(X, X.round()), "var sample:", list(m.var_names[:5]))
+    if m.raw is not None:
+        R = d(m.raw.X[:200])
+        print(name, "raw min/max:", R.min(), R.max(), "(negative = scaled, do not use)")
 if "spatial" in a.obsm:
     print(
         "coords min/max:",
@@ -83,7 +85,11 @@ metabolites, neurotransmitters, hormones or lipids, or has such a modality: read
 
 - **Input**: (typically) non-negative, library-size normalised, log1p expression in `.X` (or `layer=`).
   `use_raw` defaults to `False`. The single-cell methods reject negative input with `ValueError: mat
-  contains negative values`, so scaled or z-scored values cannot be passed to them at all.
+  contains negative values`, so scaled or z-scored values cannot be passed to them at all. They
+  also check for raw counts: all-integral values, or a maximum above 50, warn that the matrix does
+  not look log1p-normalised, and, wherever a log-fold-change is computed (`li.mt.logfc`, and so
+  `rank_aggregate`), a maximum above ~709 -- where inverting the log overflows -- raises
+  `ValueError: mat contains values too large to have been log-transformed`.
   Spatial methods with `x_transform`/`y_transform` (bivariate, MISTy) also accept scaled input.
 - **"Please check if appropriate organism/ID type was provided!"** means the resource and
   `var_names` do not overlap. Tell the user both causes: `var_names` that are not gene symbols
@@ -91,13 +97,13 @@ metabolites, neurotransmitters, hormones or lipids, or has such a modality: read
   mouse use `resource_name="mouseconsensus"`; for a fuller map or any other organism translate
   the resource with HCOP orthologs (`li.rs.get_hcop_orthologs`, read `prior-knowledge.md`).
 - **Complexes**: subunits joined by `_`. `ligand_complex` / `receptor_complex` hold the full name.
-  `ligand` / `receptor` hold the least-expressed subunit, but only in a single method's result --
-  `rank_aggregate` drops them, along with `*_means` and `*_props`.
+  `ligand` / `receptor` hold the least-expressed subunit; both they and `*_means` / `*_props` are
+  in a single method's result and in `rank_aggregate`'s.
 - **Where results land**: single-cell methods write `adata.uns["liana_res"]` in place;
   `bivariate` and `inflow` return a **new** AnnData; `lric`, `cross_pcf` and MISTy write `.uns` keys.
-- **Two thresholds**, both 0.05 by default and worth tuning: `expr_prop` (single-cell methods) is
-  the fraction of cells within a cell-type group expressing a gene; `nz_prop` (spatial methods only)
-  is the fraction of all cells or spots with a non-zero value.
+- **Two thresholds**, both 0.05 by default and worth tuning: `expr_prop` (single-cell methods, and
+  `lric`'s cell-type-directed mode) is the fraction of cells within a cell-type group expressing a
+  gene; `nz_prop` (spatial methods only) is the fraction of all cells or spots with a non-zero value.
 - Plot with `li.pl.*` (plotnine, returns a `ggplot`). Do not rebuild these plots from matplotlib primitives.
 - Extras: MOFA, Tensor-cell2cell, pseudobulk DE, causal networks and MetalinksDB need
   `pip install 'liana[extras]'`. Before writing code for such a route, import the package it needs

@@ -217,7 +217,10 @@ def df_to_lr(
 
     # summarise stats for each lr
     for key in stat_names:
-        stat_columns = lr_res.columns[lr_res.columns.str.endswith(key)]
+        # exact `{ligand,receptor}_{key}` match: a suffix match would also pick up any other
+        # stat ending in `key` (`"val"` matches `ligand_pval`) and the `interaction_` columns
+        # written by an earlier iteration of this loop
+        stat_columns = [col for col in (f"{P.ligand}_{key}", f"{P.receptor}_{key}") if col in lr_res.columns]
         lr_res.loc[:, f"interaction_{key}"] = lr_res.loc[:, stat_columns].mean(axis=1)
 
     lr_res["interaction"] = lr_res["ligand_complex"] + lr_sep + lr_res["receptor_complex"]

@@ -8,7 +8,7 @@ Tutorial: `LRIC_tutorial`. Unpublished extension (Alsayah et al., in preparation
 
 | mode | call | adds |
 |---|---|---|
-| tissue architecture only | `li.mt.cross_pcf(adata, groupby="cell_type")` | `source`, `target`, `radius`, `g` |
+| tissue architecture only | `li.mt.cross_pcf(adata, groupby="cell_type")` | `source`, `target`, `interaction`, `radius`, `g` |
 | LR, cell-type agnostic | `li.mt.lric(adata, resource_name=...)` | `ligand_complex`, `receptor_complex`, `interaction`, `radius`, `g` |
 | LR, directed by cell type | `li.mt.lric(adata, resource_name=..., groupby="cell_type")` | plus `source`, `target`, `g_expr`, `g_pcf` |
 
@@ -30,7 +30,9 @@ li.mt.lric(adata, resource_name="mouseconsensus", groupby="cell_type")   # radii
 - `min_cells=None` drops cell types making up 1% or less of the cells; pass an integer to override.
 - `nz_prop` applies in the agnostic mode (fraction of all cells), `expr_prop` in the directed mode
   (fraction within each cell type). Masked pairs stay as NaN rows.
-- `groupby_pairs` and `cell_types` restrict the pairs; `pair_chunk` trades memory for speed.
+- `groupby_pairs` and `cell_types` restrict which pairs are *emitted*, not which cells are used
+  (the null conditions on the whole slide), so they do not make the call faster; `pair_chunk` is
+  deprecated and ignored.
 
 ## Summaries and plots
 
@@ -42,7 +44,9 @@ li.mt.get_lric_divergence(adata, feature_a={"source": "Astro", "target": "Neuron
 li.pl.lric_divergence(adata, feature_a=feature_a, feature_b=feature_b)
 ```
 
-`get_lric_auc` output columns match `li.pl.dotplot`. Divergence compares two curves selected by
+`get_lric_auc` output columns match `li.pl.dotplot`. It scores one curve per key, so it raises on a
+result whose rows are told apart by an extra column (`sample`, `condition`) rather than scoring one
+of them arbitrarily: pass one sample at a time. Divergence compares two curves selected by
 `{column: value}` dicts over any columns, so after concatenating results from several samples with a
 `condition` column it compares the same interaction across conditions. `g` is floored at 0.05
 before `log2`; pass `transform_fn=np.log2` to drop empty bins instead.

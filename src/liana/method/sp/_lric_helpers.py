@@ -13,6 +13,9 @@ from liana._core._docs import d
 
 _ID_COLS = ("source", "target", "ligand_complex", "receptor_complex", "interaction")
 
+_CURVE_COLS = ("radius", "g", "g_expr", "g_pcf")
+"""The per-radius value columns of a ``lric``/``cross_pcf`` result -- never part of a curve's key."""
+
 
 type CurveTransform = Callable[[NDArray[np.floating]], NDArray[np.floating]]
 """Rescales a ``g(r)`` curve before curves are compared (default: :func:`_log2_floor`)."""
@@ -23,6 +26,28 @@ def _log2_floor(g: NDArray[np.floating]) -> NDArray[np.floating]:
     # `np.asarray` only to keep it typed: numpy's ufunc stubs widen to `Any`
     # It is a no-op on an array.
     return np.asarray(np.log2(np.maximum(g, 0.05)))
+
+
+def _require_one_curve_set(res: pd.DataFrame, ids: list[str]) -> None:
+    """Reject a frame that stacks the results of several samples/conditions.
+
+    Filling the wide matrix is a scatter (``Y[gid, rid] = ...``) keyed on the id
+    columns and radius, so stacked results interleave: rows that share a key
+    overwrite one another, and rows on disjoint radius grids land in different
+    columns of the same row -- either way one curve is scored out of several.
+    ``_ID_COLS`` is a fixed tuple, so an annotation column such as ``sample`` or
+    ``condition`` is never part of the key; if any non-curve column varies, the
+    frame holds more than one result. Checking the columns rather than the keys
+    catches the disjoint-grid case, which collides on no key at all.
+    """
+    culprits = [c for c in res.columns if c not in {*ids, *_CURVE_COLS} and res[c].nunique(dropna=False) > 1]
+    if not culprits:
+        return
+    raise ValueError(
+        f"the column(s) {culprits} take more than one value, so this result stacks several "
+        f"results whose g(r) curves would be scored as one. `get_lric_auc` scores one curve per "
+        f"{ids} key: subset the frame (e.g. one sample at a time) or group it by {culprits} first."
+    )
 
 
 @d.dedent
@@ -73,6 +98,14 @@ def get_lric_auc(
     The column names match :func:`liana.pl.dotplot`'s expectations. Empty if
     nothing clears ``min_bins``.
 
+    Raises
+    ------
+    ValueError
+        If any column other than the id and ``g(r)`` columns takes more than one
+        value -- e.g. a concatenation of several results, separated by a
+        ``sample``/``condition`` column. Score one result at a time, or group by
+        that column and score each group.
+
     Examples
     --------
     Rank the interactions of a spatial result by how co-enriched they are across radius -- here the cell-type-agnostic LRIC of :func:`liana.mt.lric.__call__`:
@@ -87,6 +120,8 @@ def get_lric_auc(
     ids = [c for c in _ID_COLS if c in res.columns]
     if not ids:
         raise ValueError(f"None of {_ID_COLS} found in the result's columns.")
+
+    _require_one_curve_set(res, ids)
 
     # (n_groups, n_radii) wide matrix -- the radius grid is shared by every group
     radii = np.unique(res["radius"].to_numpy(dtype=float))
@@ -150,6 +185,11 @@ def get_lric_divergence(
     area *between* two ``transform_fn(g(r))`` curves -- ``0`` means identical
     spatial profiles, larger means more different -- and reports where along
     radius the separation peaks.
+
+    Unlike :func:`get_lric_auc`, which scores one result at a time and rejects a
+    frame that stacks several, the divergence is meant for a concatenation of
+    results -- pin the column that separates them (e.g. ``condition``) in both
+    selections.
 
     Parameters
     ----------

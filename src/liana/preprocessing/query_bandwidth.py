@@ -35,7 +35,7 @@ def query_bandwidth(
     Returns
     -------
     A `plotnine` plot and a `pandas` DataFrame with the following columns:
-        - `bandwith`: the bandwidth (maximum distance) at which the average
+        - `bandwidth`: the bandwidth (maximum distance) at which the average
         number of neighbors is maximized.
         - `neighbours`: the average number of neighbors at the specified
         bandwidth.
@@ -60,7 +60,7 @@ def query_bandwidth(
 
     for n in range(interval_n):
         max_distance = interval[n]
-        df.loc[n, "bandwith"] = max_distance
+        df.loc[n, "bandwidth"] = max_distance
 
         # query the neighbors within the specified distance
         num_neighbors = tree.query_radius(_reference, r=max_distance, count_only=True)
@@ -70,7 +70,7 @@ def query_bandwidth(
         df.loc[n, "neighbours"] = avg_nn - 1
 
     p = (
-        ggplot(df, aes(x="bandwith", y="neighbours"))
+        ggplot(df, aes(x="bandwidth", y="neighbours"))
         + geom_line()
         + geom_point()
         + theme_bw(base_size=16)

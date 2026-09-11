@@ -31,7 +31,7 @@ adata.obsp["spatial_connectivities"]     # what every spatial method reads
 ## 2. Score
 
 ```python
-lr = li.mt.bivariate(adata, global_name="morans", n_perms=100, add_categories=True)
+lr = li.mt.bivariate(adata, resource_name="consensus", global_name="morans", n_perms=100, add_categories=True)
 ```
 
 Returns a **new** AnnData (obs = spots, var = interactions named `LIG^REC`):
@@ -48,8 +48,9 @@ Returns a **new** AnnData (obs = spots, var = interactions named `LIG^REC`):
 `li.mt.bivariate.show_functions()` lists them. `global_name`: `"morans"`, `"lee"`, or a list.
 
 `n_perms`: `None` no p-values; `>0` permutation p-values (the slow part); `0` analytical p-values,
-Moran's R only. `mask_negatives=True` zeroes scores and sets p to 1 wherever the category is not
-high-high. `use_raw` and `layer` are keyword-only extras, not positional.
+which need `local_name="morans"` too -- Moran's R only. `mask_negatives=True` zeroes scores and sets
+p to 1 wherever the category is not high-high. `use_raw` and `layer` are keyword-only extras, not
+positional.
 
 ## Footguns
 

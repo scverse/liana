@@ -84,8 +84,8 @@ optional-dependencies.tutorials-gpu = [
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://liana.readthedocs.io/"
-urls.Homepage = "https://github.com/scverse/liana-py"
-urls.Source = "https://github.com/scverse/liana-py"
+urls.Homepage = "https://github.com/scverse/liana"
+urls.Source = "https://github.com/scverse/liana"
 scripts.liana-install-skills = "liana._skills.install:main"
 
 [dependency-groups]

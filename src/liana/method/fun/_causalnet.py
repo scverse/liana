@@ -46,6 +46,8 @@ def find_causalnet(
         A dictionary of input node scores.
     output_node_scores : dict
         A dictionary of output node scores.
+        Scores of nodes absent from ``prior_graph`` are dropped with a warning, as
+        :func:`liana.rs.build_prior_network` prunes unreachable nodes.
     node_weights : dict, optional
         A dictionary of node weights. The keys are the node names, the values are the weights.
         If None, all nodes will have the same weight.
@@ -86,6 +88,11 @@ def find_causalnet(
     P
         Insantce of the Corneto problem definition
 
+    Raises
+    ------
+    RuntimeError
+        If the solver does not find an optimal solution.
+
     Examples
     --------
     Takes the pruned graph from :func:`liana.rs.build_prior_network` and selects
@@ -105,7 +112,19 @@ def find_causalnet(
     if solver is None:
         solver = cn.methods.carnival.select_mip_solver()
 
-    measured_nodes = set(input_node_scores.keys()) | set(output_node_scores.keys())
+    # `build_prior_network` prunes unreachable nodes (and rewrites complexes) by design,
+    # so scores for nodes it dropped are expected rather than an error
+    vertices = set(prior_graph.vertices)
+    missing_nodes = (set(input_node_scores) | set(output_node_scores)) - vertices
+    if missing_nodes:
+        _logg(
+            f"{len(missing_nodes)} scored node(s) absent from `prior_graph` are ignored: {sorted(missing_nodes)}",
+            level="warn",
+            verbose=verbose,
+        )
+        input_node_scores = {k: v for k, v in input_node_scores.items() if k in vertices}
+        output_node_scores = {k: v for k, v in output_node_scores.items() if k in vertices}
+    measured_nodes = set(input_node_scores) | set(output_node_scores)
 
     _logg("Total positive/negative scores of the inputs and outputs:", verbose=verbose)
     w_neg_in, w_pos_in = _get_scores(input_node_scores)
@@ -160,7 +179,15 @@ def find_causalnet(
         P.add_objectives(W.T @ E)
 
         _logg(f"Solving with {solver}...", verbose=verbose)
-        P.solve(solver=solver, verbosity=int(bool(verbose)), **kwargs)
+        solved = P.solve(solver=solver, verbosity=int(bool(verbose)), **kwargs)
+
+        # a failed solve leaves the objectives at None and would surface as a `TypeError` in corneto
+        status = getattr(solved, "status", None)
+        if status is not None and "optimal" not in str(status):
+            raise RuntimeError(
+                f"`{solver}` did not solve the problem (status: {status}). "
+                "Consider installing another mixed-integer solver, or relaxing the penalties."
+            )
 
         obj_names = ["Loss (unfitted inputs/output)", "Edge penalty error", "Node penalty error"]
         _logg("Solution summary:", verbose=verbose)

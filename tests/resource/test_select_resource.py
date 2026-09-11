@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 from liana.resource.select_resource import _handle_resource, select_resource
@@ -90,3 +91,18 @@ def test_resource_exception_xy() -> None:
             y_name="y",
             verbose=True,
         )
+
+
+@pytest.mark.parametrize(
+    ("resource", "interactions", "named"),
+    [
+        (pd.DataFrame({"ligand": [], "receptor": []}), None, "resource"),
+        (None, [], "interactions"),
+    ],
+)
+def test_handle_resource_exception_empty(
+    resource: pd.DataFrame | None, interactions: list[tuple[str, str]] | None, named: str
+) -> None:
+    # an empty resource used to pass through and die as a `UFuncTypeError` when complexes were exploded
+    with pytest.raises(ValueError, match=f"resource is empty. Check that the `{named}`"):
+        _handle_resource(interactions=interactions, resource=resource, verbose=False)

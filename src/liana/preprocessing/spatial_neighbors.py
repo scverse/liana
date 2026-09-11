@@ -12,9 +12,11 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import normalize
 from tqdm import tqdm
 
+from liana._core._common import _logg
 from liana._core._constants import DefaultValues as V
 from liana._core._constants import Keys as K
 from liana._core._docs import d
+from liana._core._pipe_utils._pre import _require_groupby
 from liana._core._types import get_coordinates, get_obs
 
 type _Kernel = Literal["gaussian", "exponential", "linear", "misty_rbf"]
@@ -77,6 +79,7 @@ def spatial_neighbors(
     spatial_key: str = K.spatial_key,
     key_added: str = K.spatial_key,
     inplace: bool = V.inplace,
+    verbose: bool | None = V.verbose,
 ) -> np.ndarray | None:
     """
     Generate spatial connectivity weights using Euclidean distance.
@@ -93,6 +96,8 @@ def spatial_neighbors(
         Essentially, the maximum number of edges in the spatial connectivity graph.
         Note that whenever more than `max_neighbours` spots fall within `cutoff` this truncates
         the neighbourhood, and the resulting connectivities are no longer symmetric.
+        Clamped down to the number of available locations (`reference` when given, else the spots
+        themselves), since fewer neighbours than that cannot be found; logged under `verbose=True`.
     %(kernel)s
     set_diag
         Logical, sets connectivity diagonal to 0 if `False`. Default is `False`.
@@ -113,8 +118,11 @@ def spatial_neighbors(
     %(spatial_key)s
     key_added
         Key to add to `adata.obsp` if `inplace = True`. If reference is not
-        `None`, key will be added to `adata.obsm`.
+        `None`, key will be added to `adata.obsm` and any existing `.obsp` entry
+        under the same key is left untouched -- methods that read `.obsp` would
+        then keep using that older graph, so a warning is emitted.
     %(inplace)s
+    %(verbose)s
 
     Notes
     -----
@@ -132,7 +140,7 @@ def spatial_neighbors(
     Raises
     ------
     ValueError
-        If no ``cutoff`` or ``bandwith`` are provided
+        If no ``cutoff`` or ``bandwidth`` are provided
     AssertionError
         If the provided ``spatial_key`` is not in ``adata.obs`` or if ``kernel``
         function is not valid.
@@ -160,10 +168,24 @@ def spatial_neighbors(
 
     coordinates = get_coordinates(adata, spatial_key)
 
-    _reference: ArrayLike = coordinates if reference is None else reference
+    _reference = np.asarray(coordinates if reference is None else reference)
+
+    # `+1` to exclude self, but `NearestNeighbors` rejects `n_neighbors > n_samples_fit`, and the tree is
+    # fit on `_reference` -- which is `coordinates` only when no `reference` was given.
+    n_neighbors = min(max_neighbours + 1, _reference.shape[0])
+    if n_neighbors < max_neighbours + 1:
+        # info, not warn: with the default `max_neighbours=100` this fires on every
+        # dataset (or `reference`) of at most 100 locations, where the cap changes nothing
+        _logg(
+            f"`max_neighbours={max_neighbours}` needs {max_neighbours + 1} of the "
+            f"{_reference.shape[0]} reference location(s) (self included), so it is capped at "
+            f"{n_neighbors - 1} neighbour(s).",
+            level="info",
+            verbose=verbose,
+        )
 
     tree = NearestNeighbors(
-        n_neighbors=max_neighbours + 1,  # +1 to exclude self
+        n_neighbors=n_neighbors,
         algorithm="ball_tree",
         metric="euclidean",
     ).fit(_reference)
@@ -194,6 +216,17 @@ def spatial_neighbors(
 
     if inplace:
         if reference is not None:
+            # A `reference` graph is not square in `adata`'s observations, so it goes to `.obsm` and
+            # `.obsp` is left as-is. Methods that read connectivities from `.obsp` raise only when the
+            # key is *absent*, so an entry left over from an earlier call would be reused as if it
+            # matched this one.
+            if f"{key_added}_connectivities" in adata.obsp:
+                _logg(
+                    f"`adata.obsp['{key_added}_connectivities']` already exists and is left unchanged: "
+                    f"a `reference` graph is written to `.obsm` instead. Methods reading `.obsp` will "
+                    f"keep using the older graph. Pass a different `key_added` to keep the two apart.",
+                    level="warn",
+                )
             adata.obsm[f"{key_added}_connectivities"] = dist
         else:
             adata.obsp[f"{key_added}_connectivities"] = dist
@@ -274,6 +307,8 @@ def spatial_pair_proximity(
     1  CD14+ Monocyte         CD19+ B      0.628
     2  CD14+ Monocyte           CD34+      0.020
     """
+    _require_groupby(adata, groupby)
+
     # groupby_labels use categories if categorical
     groupby_labels = np.asarray(get_obs(adata)[groupby])
     coordinates = get_coordinates(adata, spatial_key)

@@ -187,9 +187,15 @@ class MethodMeta:
                 progress_bar.set_description(f"Now running: {sample}")
 
             subset = adata[obs[sample_key] == sample]
-            if not isinstance(subset, an.AnnData):
-                raise TypeError(f"Expected an AnnData slice, got {type(subset).__name__}.")
-            temp = subset.to_memory().copy() if subset.isbacked else subset.copy()
+            if isinstance(subset, an.AnnData):
+                temp: an.AnnData | MuData = subset.to_memory().copy() if subset.isbacked else subset.copy()
+            elif isinstance(subset, MuData):
+                # slicing a MuData yields a MuData, which the methods take just as well as an
+                # AnnData; `MuData` has no `to_memory`, and its own `copy` explains what a backed
+                # object needs instead
+                temp = subset.copy()
+            else:
+                raise TypeError(f"Expected an AnnData or MuData slice, got {type(subset).__name__}.")
 
             sample_res = self(temp, inplace=False, verbose=full_verbose, **kwargs)
             if not isinstance(sample_res, DataFrame):  # only the consensus path returns a dict
@@ -274,10 +280,7 @@ class Method(MethodMeta):
         %(min_cells)s
         %(groupby_pairs)s
         %(base)s
-        supp_columns
-            Additional columns to be added from any of the methods implemented in liana,
-            or any of the columns returned by `scanpy.tl.rank_genes_groups`, each starting with ligand_* or receptor_*.
-            For example, `['ligand_pvals', 'receptor_pvals']`. None by default.
+        %(supp_columns)s
         %(return_all_lrs)s
         %(key_added)s
         %(use_raw)s

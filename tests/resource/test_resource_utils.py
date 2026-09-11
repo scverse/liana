@@ -1,5 +1,6 @@
 import decoupler as dc
 import numpy as np
+import pandas as pd
 import pytest
 
 from liana.resource import select_resource
@@ -33,3 +34,25 @@ def test_generate_nondefault_lr_resource() -> None:
     lr_net = generate_lr_geneset(resource, net, source="tf", weight=None, target="genesymbol")
     assert lr_net.shape[0] == 250
     assert "weight" not in lr_net.columns
+
+
+def test_generate_lr_geneset_deduplicates_net() -> None:
+    """A duplicated `net` row used to inflate the subunit count and drop the interaction entirely."""
+    resource = pd.DataFrame({"ligand": ["LGALS9"], "receptor": ["PTPRC"]})
+    net = pd.DataFrame(
+        {
+            "source": ["pathA", "pathA", "pathA"],
+            "target": ["LGALS9", "PTPRC", "PTPRC"],
+            "weight": [1.0, 1.0, 1.0],
+        }
+    )
+
+    lr_net = generate_lr_geneset(resource, net)
+
+    assert lr_net["interaction"].tolist() == ["LGALS9^PTPRC"]
+    assert lr_net["weight"].tolist() == [1.0]
+
+    # a duplicate that disagrees on the weight is ambiguous, not redundant
+    net.loc[net.index[-1], "weight"] = -1.0
+    with pytest.raises(ValueError, match="disagree on 'weight'"):
+        generate_lr_geneset(resource, net)

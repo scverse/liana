@@ -118,8 +118,12 @@ def test_inflow_no_features_pass_filter(toy_spatial: AnnData) -> None:
 
 
 def test_inflow_invalid_groupby(toy_spatial: AnnData) -> None:
-    """Test error with invalid groupby column."""
-    with pytest.raises(KeyError):
+    """An invalid `groupby` names the column, and does so before any work is done.
+
+    It used to surface as a bare `KeyError: 'nonexistent_column'` out of
+    `pd.get_dummies`, after the whole resource had already been processed.
+    """
+    with pytest.raises(KeyError, match=r"not found in .adata\.obs\.columns."):
         inflow(toy_spatial, groupby="nonexistent_column", resource_name="consensus", use_raw=True)
 
 

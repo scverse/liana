@@ -1,6 +1,10 @@
+import logging
+
 import numpy as np
 import pandas as pd
+import pytest
 from anndata import AnnData
+from scipy.sparse import csr_matrix
 from tests._helpers import not_none
 
 from liana.method import cellphonedb, natmi
@@ -195,3 +199,41 @@ def test_pipeline_with_spatial_kwargs(pbmc68k: AnnData) -> None:
     # Long range should generally have higher scores (less downweighting)
     # Check that at least some scores differ
     assert not np.allclose(res_short["expr_prod"].to_numpy(), res_long["expr_prod"].to_numpy())
+
+
+def test_max_neighbours_clamped_to_reference_size(caplog: pytest.LogCaptureFixture) -> None:
+    """`max_neighbours + 1` used to exceed `n_samples_fit` and blow up sklearn on any dataset <= 100 obs."""
+    import anndata as ad
+
+    rng = np.random.default_rng(0)
+    adata = ad.AnnData(np.zeros((100, 5)))
+    adata.obsm["spatial"] = rng.uniform(0, 100, size=(100, 2))
+
+    # the clamp is logged at info level, not warned about: at the default
+    # `max_neighbours=100` it fires on every dataset of at most 100 locations
+    with caplog.at_level(logging.INFO):
+        conns = not_none(spatial_neighbors(adata, bandwidth=50, cutoff=0.1, inplace=False, verbose=True))
+
+    assert conns.shape == (100, 100)
+    assert "capped at 99 neighbour(s)" in caplog.text
+
+
+def test_spatial_pair_proximity_unknown_groupby(toy_spatial: AnnData) -> None:
+    """An unknown `groupby` used to surface as a bare `KeyError: '<value>'`."""
+    with pytest.raises(KeyError, match="not found in"):
+        spatial_pair_proximity(adata=toy_spatial, groupby="not_a_column")
+
+
+def test_reference_warns_that_obsp_is_left_stale(toy_spatial: AnnData) -> None:
+    """A `reference=` graph goes to `.obsm`; methods reading `.obsp` would silently reuse the old one."""
+    spatial_neighbors(adata=toy_spatial, bandwidth=200, cutoff=0.1)
+    before = csr_matrix(toy_spatial.obsp["spatial_connectivities"]).toarray()
+
+    reference = np.asarray(toy_spatial.obsm["spatial"])[:10]
+    with pytest.warns(UserWarning, match="already exists and is left unchanged"):
+        spatial_neighbors(adata=toy_spatial, bandwidth=200, cutoff=0.1, reference=reference)
+
+    # the warning is about a real hazard: `.obsp` is genuinely untouched
+    after = csr_matrix(toy_spatial.obsp["spatial_connectivities"]).toarray()
+    np.testing.assert_array_equal(after, before)
+    assert toy_spatial.obsm["spatial_connectivities"].shape == (toy_spatial.n_obs, 10)

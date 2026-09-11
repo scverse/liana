@@ -63,9 +63,10 @@ Tutorial `mofatalk` (`mofacellular` for the gene-level variant via `li.ms.adata_
 Needs `mofapy2`, `mofax`, `muon`.
 
 ```python
+import muon
 mdata = li.ms.lrs_to_views(adata, score_key="magnitude_rank", obs_keys=["condition"],
                            lr_prop=0.3, lrs_per_sample=20, samples_per_view=5)
-mu.tl.mofa(mdata, use_obs="union", n_factors=5, convergence_mode="medium", seed=1337, outfile="mofa.h5ad")
+muon.tl.mofa(mdata, use_obs="union", n_factors=5, convergence_mode="medium", seed=1337, outfile="mofa.h5ad")
 scores = li.ms.get_factor_scores(mdata, obsm_key="X_mofa", obs_keys=["condition"])
 loads = li.ms.get_variable_loadings(mdata, varm_key="LFs", view_sep=":", pair_sep="&", variable_sep="^")
 ```

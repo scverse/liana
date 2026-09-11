@@ -15,7 +15,7 @@ from liana._core._constants import Keys as K
 from liana._core._docs import d
 from liana._core._pipe_utils import assert_covered
 from liana._core._pipe_utils._common import _get_props
-from liana._core._pipe_utils._pre import _choose_mtx_rep
+from liana._core._pipe_utils._pre import _choose_mtx_rep, _require_groupby
 from liana._core._types import MatrixLike, copy_aligned, get_obs
 from liana.method.sp._utils import (
     _add_complexes_to_var,
@@ -178,6 +178,15 @@ class SpatialInflow:
                 adata, complex_sep, verbose, use_raw=use_raw, layer=layer, **kwargs
             )
 
+        # Validate that exactly one of groupby or obsm_key is provided
+        if (groupby is None) == (obsm_key is None):
+            raise ValueError("Exactly one of 'groupby' or 'obsm_key' must be provided.")
+        if groupby is not None:
+            # `pd.get_dummies(get_obs(adata)[groupby])` below would otherwise report a bare
+            # `KeyError: '<value>'`. `_require_groupby` rather than `_check_groupby`: the latter
+            # converts the column to categorical in place on the caller's object.
+            _require_groupby(adata, groupby)
+
         # NOTE: There are some repetitions with bivariate scores
         # one could define a shared class to process adata, and split the two thereafter
         resource = _handle_resource(
@@ -203,10 +212,6 @@ class SpatialInflow:
 
         # Subset adata to only the relevant (ligand + receptor) features
         adata = adata[:, np.intersect1d(entities, adata.var_names)]
-
-        # Validate that exactly one of groupby or obsm_key is provided
-        if (groupby is None) == (obsm_key is None):
-            raise ValueError("Exactly one of 'groupby' or 'obsm_key' must be provided.")
 
         # Build cell-type matrix
         if obsm_key is not None:

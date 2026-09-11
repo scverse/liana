@@ -58,7 +58,10 @@ def build_prior_network(
     ... )
 
     The network is pruned to what lies on a path from an input to an output. Hand
-    the result to :func:`liana.mt.find_causalnet`.
+    the result to :func:`liana.mt.find_causalnet` together with the scores keyed the
+    way the graph is: the split above happens only here, so pass `{"CD4": 1.0}` on,
+    not `{"HLA-DRA^CD4": 1.0}` -- `find_causalnet` warns about and drops any scored
+    node that the graph does not carry.
     """
     _check_if_installed("corneto")  # raises a helpful ImportError if the extra is missing
     from corneto import Graph

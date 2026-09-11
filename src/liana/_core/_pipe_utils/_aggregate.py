@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import reduce
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -53,13 +52,13 @@ def _aggregate(
     if _consensus_opts is None:
         _consensus_opts = ["Magnitude", "Specificity"]
 
-    frames = [lrs[method].drop_duplicates(keep="first") for method in lrs]
-    # reduce to a df with the shared keys + all relevant sc
-    lr_res = reduce(
-        lambda left, right: pd.merge(left, right, how="outer", on=_key_cols, suffixes=("", "_duplicated")), frames
-    )
-    # drop duplicated columns
-    lr_res = lr_res.loc[:, ~lr_res.columns.str.endswith("_duplicated")]
+    # Per-entity columns are payload, not keys: complexes are reassembled per method and methods can
+    # keep different subunits of the same complex, so the leftmost method in `methods=` wins.
+    frames = list(lrs.values())
+    lr_res = frames[0].copy()
+    for frame in frames[1:]:
+        shared = frame.columns.difference(_key_cols).intersection(lr_res.columns)
+        lr_res = lr_res.merge(frame.drop(columns=shared), how="outer", on=_key_cols)
 
     order_col = ""
     if "Specificity" in _consensus_opts:
@@ -109,6 +108,7 @@ def _rank_aggregate(
     if aggregate_method not in ("rra", "mean"):
         raise ValueError(f"`aggregate_method` must be 'rra' or 'mean', got {aggregate_method!r}.")
 
+    all_cols = sorted({spec[0] for spec in specs.values()})
     # methods whose score was not computed (e.g. permutation p-values with `n_perms=None`) have no column
     specs = {method: spec for method, spec in specs.items() if spec[0] in lr_res.columns}
     # rank each unique score column once (Connectome and NATMI share `expr_prod`)
@@ -116,6 +116,12 @@ def _rank_aggregate(
     for col, asc in specs.values():
         if columns.setdefault(col, asc) != asc:
             raise ValueError(f"Column `{col}` is ranked in opposite directions by different methods.")
+    if not columns:
+        raise ValueError(
+            f"No score column is available to aggregate: none of {all_cols} is in the results. "
+            "With `n_perms=None` methods whose specificity is a permutation p-value have no "
+            "specificity score; pass `consensus_opts=['Magnitude']` or set `n_perms`."
+        )
     if len(columns) < 2:
         _logg(f"Aggregating over {len(columns)} score(s) only: {sorted(columns)}.", level="warn", verbose=verbose)
 

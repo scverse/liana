@@ -26,8 +26,8 @@ li.mt.rank_aggregate(meta, groupby="cell_type", resource=resource.rename(columns
 ```
 
 - `get_metalinks` filters are AND-combined; `li.rs.get_metalinks_values(table, column)` lists the
-  allowed values, `li.rs.describe_metalinks()` the schema. Needs `pooch`; `cache_dir` overrides where
-  the database is cached.
+  allowed values, `li.rs.describe_metalinks()` the schema. Needs `pooch`; the download is cached
+  under `sc.settings.datasetdir`, and `db_path=` reads a local copy of the database instead.
 - `estimate_metalinks` needs `decoupler>=2`; extra kwargs (e.g. `tmin`) go to both the enzyme and
   transporter steps. It returns a MuData with modalities `metabolite` (signed activity scores) and
   `receptor`. Metabolites without a transporter entry are left unmasked.
