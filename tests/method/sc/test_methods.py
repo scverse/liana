@@ -105,6 +105,15 @@ def test_natmi(toy_adata: AnnData, expected_shape: tuple[int, int]) -> None:
     )
 
 
+def test_natmi_single_pair_warns(toy_adata: AnnData) -> None:
+    """A single `groupby_pairs` pair leaves NATMI nothing to normalise `spec_weight` against."""
+    pairs = DataFrame({"source": ["CD34+"], "target": ["Dendritic"]})
+    with pytest.warns(UserWarning, match="`spec_weight` is 1 for every ligand"):
+        res = natmi(toy_adata, groupby="bulk_labels", use_raw=True, inplace=False, groupby_pairs=pairs)
+    assert isinstance(res, DataFrame)
+    assert (res["spec_weight"] == 1.0).all()
+
+
 def test_scseqcomm(toy_adata: AnnData, expected_shape: tuple[int, int]) -> None:
     scseqcomm(toy_adata, groupby="bulk_labels", expr_prop=0, return_all_lrs=True)
 

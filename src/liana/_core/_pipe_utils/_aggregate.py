@@ -14,6 +14,24 @@ if TYPE_CHECKING:
     from liana.method.sc._rank_aggregate import AggregateClass
 
 
+def _assign_min_or_max(x: pd.Series, x_ascending: bool | None) -> float:
+    """The worst *observed* value of a score column, in the direction the column is ranked.
+
+    `NaN` is ignored rather than propagated, so the value can be used to fill it.
+
+    Raises
+    ------
+    ValueError
+        If every value is missing, which leaves no observed value to fall back on.
+    """
+    values = np.asarray(x, dtype=float)
+    if values.size == 0 or bool(np.isnan(values).all()):
+        raise ValueError(
+            f"Score column {getattr(x, 'name', None)!r} holds no value to rank: it is empty or entirely NaN."
+        )
+    return float(np.nanmax(values) if x_ascending else np.nanmin(values))
+
+
 def _aggregate(
     lrs: dict[str, pd.DataFrame],
     consensus: AggregateClass,
@@ -125,8 +143,21 @@ def _rank_aggregate(
     if len(columns) < 2:
         _logg(f"Aggregating over {len(columns)} score(s) only: {sorted(columns)}.", level="warn", verbose=verbose)
 
+    # `rankdata` defaults to `nan_policy="propagate"`, which turns the whole column NaN on a single
+    # missing score; a missing score instead ties with the worst observed one, as `return_all_lrs`
+    # rows already do.
+    n_missing = lr_res[list(columns)].isna().sum()
+    if n_missing.any():
+        _logg(
+            f"Missing scores were ranked as the worst observed value in: {n_missing[n_missing > 0].to_dict()}",
+            level="warn",
+            verbose=verbose,
+        )
     rmat: NDArray[np.floating] = np.column_stack(
-        [rankdata(lr_res[col] if asc else -lr_res[col], method="average") for col, asc in columns.items()]
+        [
+            rankdata(lr_res[col].fillna(_assign_min_or_max(lr_res[col], asc)) * (1 if asc else -1), method="average")
+            for col, asc in columns.items()
+        ]
     )
 
     if aggregate_method == "rra":

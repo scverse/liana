@@ -79,6 +79,10 @@ def _get_liana_res(
     liana_res: DataFrame | None,
     uns_key: str = K.uns_key,
 ) -> DataFrame:
+    # an explicitly passed frame wins: `adata` is a required argument of some plots (`circle`),
+    # so preferring `.uns` there would leave no way to plot a frame of one's own
+    if liana_res is not None:
+        return liana_res.copy()
     if adata is not None:
         if uns_key not in adata.uns:
             raise KeyError(f"`{uns_key}` not found in `adata.uns`.")
@@ -87,6 +91,4 @@ def _get_liana_res(
         if not isinstance(res, DataFrame):
             raise TypeError(f"`adata.uns['{uns_key}']` must be a DataFrame, got {type(res).__name__}.")
         return res.copy()
-    if liana_res is not None:
-        return liana_res.copy()
     raise ValueError("`liana_res` or AnnData with `uns_key` must be provided!")

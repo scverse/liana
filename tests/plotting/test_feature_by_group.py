@@ -33,6 +33,28 @@ def test_feature_by_group(toy_spatial: AnnData) -> None:
         assert values.min() >= 0 and values.max() <= 1
 
 
+def test_feature_by_group_no_normalize_autoscales(toy_spatial: AnnData) -> None:
+    """`set_clim(0, 1)` used to apply to the unnormalised values too, saturating the plot."""
+    labels = ["Dendritic", "CD56+ NK"]
+
+    _, ax = not_none(
+        feature_by_group(adata=toy_spatial, groupby="bulk_labels", labels=labels, feature="HES4", normalize=True)
+    )
+    assert [layer.get_clim() for layer in ax.collections[1:]] == [(0, 1)] * len(labels)
+
+    _, ax = not_none(
+        feature_by_group(adata=toy_spatial, groupby="bulk_labels", labels=labels, feature="HES4", normalize=False)
+    )
+    # the colorbar now spans what is drawn, which here exceeds the old fixed range
+    scaled = [layer for layer in ax.collections[1:] if not_none(layer.get_array()).max() > 0]
+    assert scaled, "no label carries expression to autoscale"
+    for layer in scaled:
+        values = not_none(layer.get_array())
+        assert layer.get_clim() != (0, 1)
+        assert layer.get_clim()[1] == pytest.approx(values.max())
+        assert values.max() > 1
+
+
 def test_feature_by_group_skips_empty_labels(toy_spatial: AnnData) -> None:
     # a label without cells is skipped rather than raising
     toy_spatial.obs["bulk_labels"] = toy_spatial.obs["bulk_labels"].cat.add_categories("Empty")

@@ -56,7 +56,8 @@ def feature_by_group(
         From adata.var_names.
     %(figure_size)s
     normalize
-        Normalize expression values between 0 and 1 for each cell type.
+        Normalize expression values between 0 and 1 for each cell type. When `False`, each
+        colorbar spans the values it is drawn from instead of a fixed `(0, 1)`.
     percentile_scaling
         Tuple specifying percentiles for scaling.
     show_counts
@@ -155,7 +156,10 @@ def feature_by_group(
             alpha=0.8,
             rasterized=True,
         )
-        sc.set_clim(0, 1)
+        if normalize:
+            # the expression was rescaled into [0, 1] above; unnormalised values keep
+            # matplotlib's autoscaling, so the colorbar spans the data that is drawn
+            sc.set_clim(0, 1)
         scatter_objects.append(sc)
 
     n_bars = len(scatter_objects)

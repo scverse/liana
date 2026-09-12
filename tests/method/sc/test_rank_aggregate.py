@@ -3,15 +3,17 @@ from itertools import product
 from typing import Literal
 from unittest import TestCase
 
+import numpy as np
 import pytest
 from anndata import AnnData
 from mudata import MuData
-from pandas import DataFrame, read_csv
+from pandas import DataFrame, Series, read_csv
 from pandas.testing import assert_frame_equal
 from tests._helpers import as_frame
 
 import liana as li
 from liana._core._constants import PrimaryColumns as P
+from liana._core._pipe_utils._aggregate import _assign_min_or_max, _rank_aggregate
 from liana.method import aggregate_meta, cellchat, cellphonedb, rank_aggregate
 from liana.method import singlecellsignalr as sca
 from liana.method.sc._liana_pipe import MdataKwargs
@@ -232,3 +234,49 @@ def _aggregate_toy(
         verbose=False,
         consensus_opts=consensus_opts,
     )
+
+
+_SPECS: dict[str, tuple[str, bool | None]] = {
+    "CellPhoneDB": ("cellphone_pvals", True),
+    "Connectome": ("lr_means", False),
+}
+
+
+def _nan_frame(col: str, nan_row: int) -> DataFrame:
+    """A four-row frame with a single missing value in `col`."""
+    frame = DataFrame(
+        {
+            "lr_means": [4.0, 3.0, 2.0, 1.0],
+            "cellphone_pvals": [0.01, 0.02, 0.03, 0.04],
+        }
+    )
+    frame.loc[nan_row, col] = np.nan
+    return frame
+
+
+@pytest.mark.parametrize(("col", "asc"), [("cellphone_pvals", True), ("lr_means", False)])
+def test_rank_aggregate_nan_gets_worst_rank(col: str, asc: bool) -> None:
+    """A single NaN used to propagate through `rankdata` and NaN the whole consensus column."""
+    frame = _nan_frame(col, nan_row=0)
+
+    with pytest.warns(UserWarning, match=f"Missing scores were ranked as the worst observed value in: {{'{col}': 1}}"):
+        # one column only, so `mean` returns that column's rank / n_rows
+        ranks = _rank_aggregate(frame, {"method": (col, asc)}, aggregate_method="mean")
+
+    assert not np.isnan(ranks).any()
+    # the NaN row ties with the worst observed value, so the two of them share the last rank
+    assert ranks[0] == ranks.max() == pytest.approx(3.5 / len(frame))
+
+    both = _rank_aggregate(frame, _SPECS, aggregate_method="rra")
+    assert not np.isnan(both).any()
+
+
+def test_rank_aggregate_all_nan_column_raises() -> None:
+    frame = DataFrame({"lr_means": [1.0, 2.0], "cellphone_pvals": [np.nan, np.nan]})
+    with pytest.raises(ValueError, match="holds no value to rank"):
+        _rank_aggregate(frame, _SPECS, aggregate_method="mean")
+
+
+@pytest.mark.parametrize(("asc", "expected"), [(True, 3.0), (False, 1.0)])
+def test_assign_min_or_max_ignores_nan(asc: bool, expected: float) -> None:
+    assert _assign_min_or_max(Series([1.0, np.nan, 3.0]), asc) == expected

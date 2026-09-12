@@ -94,7 +94,8 @@ def get_metalinks(
 
     Returns
     -------
-    A pandas DataFrame containing the query results without the source column.
+    A pandas DataFrame with one row per edge and curating `source`, so an edge annotated by several
+    databases appears once per database and a per-edge mean of `mor` is a vote across them.
 
     Examples
     --------
@@ -110,7 +111,7 @@ def get_metalinks(
     path = Path(db_path) if db_path is not None else _download_metalinksdb()
     conn = sqlite3.connect(path)
 
-    # Adjusted SELECT statement to exclude the source column
+    # one row per (edge, source); `source` is kept so that edges can be weighted by their curators
     base_query = """
     SELECT DISTINCT e.hmdb as hmdb,
                 e.uniprot AS uniprot,

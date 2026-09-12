@@ -57,7 +57,9 @@ def nmf(
     Raises
     ------
         ValueError
-            If `adata` is provided but it's not a valid instance of an `AnnData` object, if neither an `AnnData` or `DataFrame` intance is provided as input, or if `inplace=True` is combined with `df`
+            If `adata` is provided but it's not a valid instance of an `AnnData` object,
+            if neither an `AnnData` or `DataFrame` intance is provided as input, if `inplace=True` is
+            combined with `df`, or if `n_components` is None and no elbow is found within `k_range`
 
     Examples
     --------
@@ -94,6 +96,10 @@ def nmf(
 
     if n_components is None:
         errors, n_components = estimate_elbow(X, k_range=k_range, verbose=verbose, **kwargs)
+        if n_components is None:
+            raise ValueError(
+                f"No elbow was found within `k_range={k_range}`; widen it or pass `n_components` explicitly."
+            )
     else:
         errors, n_components = None, n_components
 

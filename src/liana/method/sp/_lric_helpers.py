@@ -70,11 +70,10 @@ def get_lric_auc(
     Parameters
     ----------
     %(adata)s
-        Its ``.uns[uns_key]`` holds the result. Mutually exclusive with
-        ``liana_res``.
+        Its ``.uns[uns_key]`` holds the result, read when ``liana_res`` is ``None``.
     %(uns_key)s
     %(liana_res)s
-        A ``lric`` / ``cross_pcf`` result, used when ``adata`` is ``None``.
+        A ``lric`` / ``cross_pcf`` result; takes precedence over ``adata.uns``.
     max_dist
         Integrate only over radii ``r < max_dist``; ``None`` uses all radii.
     transform_fn
@@ -194,11 +193,10 @@ def get_lric_divergence(
     Parameters
     ----------
     %(adata)s
-        Its ``.uns[uns_key]`` holds the result. Mutually exclusive with
-        ``liana_res``.
+        Its ``.uns[uns_key]`` holds the result, read when ``liana_res`` is ``None``.
     %(uns_key)s
     %(liana_res)s
-        A ``lric`` / ``cross_pcf`` result, used when ``adata`` is ``None``.
+        A ``lric`` / ``cross_pcf`` result; takes precedence over ``adata.uns``.
         May be a concatenation of several results with extra annotation columns
         (e.g. ``condition``) -- pin those in the selections to compare the same
         interaction across conditions.

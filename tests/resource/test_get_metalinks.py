@@ -8,11 +8,12 @@ from liana.resource.get_metalinks import describe_metalinks, get_metalinks, get_
 
 @pytest.mark.network
 def test_get_metalinks(metalinks_db: str) -> None:
-    result = get_metalinks(
-        db_path=metalinks_db, tissue_location="Brain", hmdb_ids="HMDB0000073", uniprot_ids="P14416"
-    ).drop_duplicates(["hmdb", "uniprot"])
+    result = get_metalinks(db_path=metalinks_db, tissue_location="Brain", hmdb_ids="HMDB0000073", uniprot_ids="P14416")
     assert isinstance(result, pd.DataFrame)
-    assert result.shape == (1, 8)
+    # one row per curating `source`; this edge is annotated by five databases, with `mor` 0 and 1
+    assert result.shape == (10, 8)
+    assert result["source"].nunique() == 5
+    assert set(result["mor"]) == {0, 1}
     assert "Dopamine" in result["metabolite"].to_numpy()
     assert "HMDB0000073" in result["hmdb"].to_numpy()
     assert "P14416" in result["uniprot"].to_numpy()

@@ -17,7 +17,7 @@ from liana._core._constants import MethodColumns as M
 from liana._core._constants import PrimaryColumns as P
 from liana._core._docs import d
 from liana._core._pipe_utils import assert_covered, filter_resource, prep_check_adata
-from liana._core._pipe_utils._aggregate import _aggregate
+from liana._core._pipe_utils._aggregate import _aggregate, _assign_min_or_max
 from liana._core._pipe_utils._common import _get_groupby_subset, _get_props, _join_stats
 from liana._core._pipe_utils._get_mean_perms import Aggregation, _get_mat_idx, _get_means_perms, _trimean
 from liana._core._pipe_utils._pre import _choose_mtx_rep
@@ -712,7 +712,9 @@ def _run_method(
         if _score.magnitude is not None:
             fill_value = _assign_min_or_max(lr_res[_score.magnitude], _score.magnitude_ascending)
             lr_res.loc[~lr_res[I.lrs_to_keep], _score.magnitude] = fill_value
-        if _score.specificity is not None:
+        # `n_perms=None` leaves a permutation-based specificity entirely unset -- there is no
+        # observed value to fall back on, and the column is dropped below anyway.
+        if _score.specificity is not None and not lr_res[_score.specificity].isna().all():
             fill_value = _assign_min_or_max(lr_res[_score.specificity], _score.specificity_ascending)
             lr_res.loc[~lr_res[I.lrs_to_keep], _score.specificity] = fill_value
 
@@ -735,10 +737,6 @@ def _run_method(
         lr_res = lr_res.drop(C.proximity, axis=1)
 
     return lr_res
-
-
-def _assign_min_or_max(x: pd.Series, x_ascending: bool | None) -> float:
-    return float(np.max(x) if x_ascending else np.min(x))
 
 
 def _cluster_stats(adata: AnnData) -> pd.DataFrame:

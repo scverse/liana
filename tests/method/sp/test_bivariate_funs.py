@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from scipy.sparse import csr_matrix
+from scipy.stats import rankdata
 
 from liana.method.sp._bivariate._global_functions import GlobalFunction, _global_r
 from liana.method.sp._bivariate._local_functions import (
@@ -11,6 +12,7 @@ from liana.method.sp._bivariate._local_functions import (
     LocalStat,
     _local_morans,
     _masked_spearman,
+    _midranks,
     _norm_product,
     _product,
     _vectorized_cosine,
@@ -80,6 +82,79 @@ def test_sp_vectorized(mats: SimpleNamespace) -> None:
 def test_sp_masked(mats: SimpleNamespace) -> None:
     sp_masked_truth = np.array([0.23636216, 0.16480756, -0.0148723, 0.22840606, -0.11492944])
     _assert_bivariate(_masked_spearman, sp_masked_truth, mats, dense_weight=True)
+
+
+@pytest.mark.parametrize("tied", [False, True])
+def test_midranks_matches_scipy(tied: bool) -> None:
+    """``_masked_spearman``'s ranking must average ties, as `scipy.stats.rankdata` does."""
+    rng = np.random.default_rng(0)
+    x = rng.normal(size=100).astype(np.float32)
+    if tied:
+        x = (x * (rng.random(100) > 0.5)).round(1).astype(np.float32)
+        assert len(np.unique(x)) < x.size, "fixture must carry ties"
+
+    np.testing.assert_allclose(_midranks(x), rankdata(x, method="average"), rtol=1e-6)
+
+
+def test_sp_masked_is_invariant_to_cell_order() -> None:
+    """Relabelling the cells must permute the scores and nothing else.
+
+    `_wcorr` used to take *ordinal* ranks (``argsort().argsort()``), which split tied
+    values in whatever order the sort visited them -- so on zero-inflated data, i.e. any
+    expression matrix, the statistic moved when the cells were reordered. A revert fails
+    this by ~0.6 on the fixture below.
+    """
+    rng = np.random.default_rng(1)
+    n, xy_n = 40, 3
+    # zero-inflated, as expression data is -- without ties the defect is invisible
+    x_mat = (rng.normal(size=(n, xy_n)) * (rng.random((n, xy_n)) > 0.5)).astype(np.float32)
+    y_mat = (rng.normal(size=(n, xy_n)) * (rng.random((n, xy_n)) > 0.5)).astype(np.float32)
+    weight = (rng.random((n, n)) * (rng.random((n, n)) < 0.3)).astype(np.float32)
+
+    assert (x_mat == 0).sum() > n, "fixture must carry ties"
+
+    base = _masked_spearman(x_mat, y_mat, weight)
+    assert (np.abs(base) > 0.1).sum() > 5, "fixture must carry signal, else this is vacuous"
+
+    perm = rng.permutation(n)
+    actual = _masked_spearman(x_mat[perm], y_mat[perm], np.ascontiguousarray(weight[np.ix_(perm, perm)]))
+
+    np.testing.assert_allclose(actual, base[perm], atol=1e-6)
+
+
+def test_sp_masked_scores_a_constant_neighbourhood_zero() -> None:
+    """A feature that is constant within a neighbourhood must score 0 there, never nan.
+
+    Midranks make an all-tied neighbourhood *exactly* constant, so its weighted variance is
+    mathematically 0 -- but in float32 with non-integer (gaussian-like) weights it rounds to
+    a tiny value of either sign: negative made ``(dx*dy)**0.5`` nan, positive gave 0/~0
+    garbage. A nan then reads as "not >=" in `_permutation_pvals`, handing an unexpressed
+    gene p = 0. Without the variance guard this fixture yields 135 nans.
+    """
+    rng = np.random.default_rng(0)
+    n, xy_n = 60, 4
+    # a 1D gaussian kernel: float, non-binary weights over a band of ~6-11 neighbours
+    d2 = (np.arange(n)[:, None] - np.arange(n)[None, :]) ** 2
+    weight = np.exp(-d2 / (2 * 4.0**2)).astype(np.float32)
+    weight[d2 > 5**2] = 0.0
+    weight = np.ascontiguousarray(weight)
+
+    x_mat = (rng.normal(size=(n, xy_n)) * (rng.random((n, xy_n)) > 0.4)).astype(np.float32)
+    # y is zero -- hence constant -- inside every neighbourhood below cell ~35, but not globally
+    y_mat = np.zeros((n, xy_n), dtype=np.float32)
+    y_mat[40:, :] = rng.normal(size=(n - 40, xy_n)).astype(np.float32)
+
+    nbrs = weight > 0
+    constant = np.array(
+        [[np.ptp(x_mat[nbrs[i], j]) == 0 or np.ptp(y_mat[nbrs[i], j]) == 0 for j in range(xy_n)] for i in range(n)]
+    )
+    assert constant.sum() > 10, "fixture must carry constant neighbourhoods"
+
+    actual = _masked_spearman(x_mat, y_mat, weight)
+
+    assert not np.isnan(actual).any()
+    np.testing.assert_array_equal(actual[constant], 0.0)
+    assert (np.abs(actual[~constant]) > 0.1).sum() > 5, "guard must not flatten the rest"
 
 
 def test_costine_vectorized(mats: SimpleNamespace) -> None:

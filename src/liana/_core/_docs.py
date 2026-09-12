@@ -324,7 +324,8 @@ cell_types
 # Plot docstrings
 _liana_res = """\
 liana_res
-    `liana_res` a `DataFrame` in liana's format.
+    `liana_res` a `DataFrame` in liana's format. Where an `adata` is accepted too, a frame passed
+    here takes precedence over `adata.uns[uns_key]`, which is only read when this is `None`.
 """
 
 _colour = """\
@@ -359,7 +360,12 @@ orderby_absolute
 
 _filter_fn = """\
 filter_fn
-    A function, applied along the columns (axis=1), used to filter the results to be plotted.
+    A function, applied along the columns (axis=1) of the results, used to filter the results to
+    be plotted. In `dotplot` and `tileplot` it selects *interactions* rather than rows: an
+    interaction (`ligand_complex` -> `receptor_complex`) is kept whenever the predicate holds for
+    any of its source-target pairs, and is then plotted for all of them, so rows that fail the
+    predicate are drawn alongside those that pass. `circle` with `pivot_mode='mean'` widens the
+    same way, while `circle` with `pivot_mode='counts'` and the misty plots filter row-wise.
 """
 
 _aggregate_fn = """\

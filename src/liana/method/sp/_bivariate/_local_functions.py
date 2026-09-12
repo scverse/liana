@@ -323,25 +323,54 @@ class LocalFunction:
         return cls.instances[name]
 
 
+@nb.njit(nb.float32[:](nb.float32[:]), cache=True)
+def _midranks(x: np.ndarray) -> np.ndarray:
+    """Ranks with ties averaged, as in ``scipy.stats.rankdata(x, method="average")`` on finite input.
+
+    ``argsort().argsort()`` gives *ordinal* ranks, which split tied values in whatever
+    order the sort happened to visit them -- so on tied (i.e. all expression) data the
+    statistic depends on cell ordering. Spearman requires midranks.
+    """
+    n = x.shape[0]
+    order = np.argsort(x)
+    ranks = np.empty(n, dtype=np.float32)
+
+    i = 0
+    while i < n:
+        j = i + 1
+        while (j < n) and (x[order[j]] == x[order[i]]):
+            j += 1
+        # 1-based ranks i+1..j averaged over the tied run; `_wcorr` is shift-invariant,
+        # so the 1-based convention only matters for matching scipy
+        avg = np.float32(0.5 * (i + j + 1))
+        for k in range(i, j):
+            ranks[order[k]] = avg
+        i = j
+
+    return ranks
+
+
 @nb.njit(nb.float32(nb.float32[:], nb.float32[:], nb.float32[:], nb.float32), cache=True)
 def _wcorr(x: np.ndarray, y: np.ndarray, w: np.ndarray, wsum: float) -> float:
 
-    x = np.argsort(x).argsort().astype(np.float32)
-    y = np.argsort(y).argsort().astype(np.float32)
+    x = _midranks(x)
+    y = _midranks(y)
 
     wx = w * x
     wy = w * y
 
     numerator = wsum * sum(wx * y) - sum(wx) * sum(wy)
 
-    denominator_x = wsum * sum(w * (x**2)) - sum(wx) ** 2
-    denominator_y = wsum * sum(w * (y**2)) - sum(wy) ** 2
-    denominator = denominator_x * denominator_y
+    ss_x = wsum * sum(w * (x**2))
+    ss_y = wsum * sum(w * (y**2))
+    denominator_x = ss_x - sum(wx) ** 2
+    denominator_y = ss_y - sum(wy) ** 2
 
-    if (denominator == 0) or (numerator == 0):
+    # constant neighbourhood -> no variance
+    if (denominator_x <= 1e-6 * ss_x) or (denominator_y <= 1e-6 * ss_y) or (numerator == 0):
         return 0.0
 
-    corr: float = numerator / (denominator**0.5)
+    corr: float = numerator / ((denominator_x * denominator_y) ** 0.5)
     return corr
 
 
