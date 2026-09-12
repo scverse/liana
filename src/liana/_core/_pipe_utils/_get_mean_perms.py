@@ -72,7 +72,7 @@ def _get_means_perms(
     aggregation: Aggregation,
     norm_factor: float | np.floating | None,
     n_jobs: int,
-    verbose: bool,
+    verbose: bool | None,
 ) -> NDArray[np.floating]:
     """
     Generate permutations and indices required for permutation-based methods
@@ -101,11 +101,7 @@ def _get_means_perms(
     X = get_x(adata)
     # gating on `isinstance(..., np.float32)` silently skipped a plain `float`
     if norm_factor is not None:
-        # Divide out-of-place (not `/=`) so we don't mutate the caller's matrix -- `adata.X`
-        # may share its buffer with `adata.raw.X`. Cast back to the original dtype because
-        # sparse `matrix / scalar` promotes to float64, which would otherwise double memory.
         X = (X / norm_factor).astype(X.dtype)
-        adata.X = X
 
     # define labels and masks
     obs = get_obs(adata)
@@ -282,7 +278,7 @@ def _generate_perms_cube(
     seed: int,
     aggregation: Aggregation,
     n_jobs: int,
-    verbose: bool,
+    verbose: bool | None,
 ) -> NDArray[np.floating]:
     """Build the ``(n_perms, n_labels, n_genes)`` cube of per-label aggregates under the null.
 

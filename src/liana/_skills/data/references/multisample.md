@@ -15,8 +15,10 @@ li.pl.dotplot_by_sample(adata, colour="magnitude_rank", size="specificity_rank",
                         inverse_colour=True, inverse_size=True, source_labels=sources, target_labels=targets)
 ```
 
-Any method has `.by_sample`. A sample whose cells all fall in one `groupby` level raises a
-ZeroDivisionError in the log-fold-change step; drop such samples.
+Only the single-cell methods and `rank_aggregate` have `.by_sample`; `li.mt.bivariate`, `inflow`,
+`lric` and `cross_pcf` do not, and calling it on them is an `AttributeError`. A sample whose cells
+all fall in one `groupby` level raises a `ValueError` naming the group in the log-fold-change step;
+drop such samples.
 
 ## 1. Targeted differential: pseudobulk DE, then LR table, then optional causal network
 
@@ -61,9 +63,10 @@ Tutorial `mofatalk` (`mofacellular` for the gene-level variant via `li.ms.adata_
 Needs `mofapy2`, `mofax`, `muon`.
 
 ```python
+import muon
 mdata = li.ms.lrs_to_views(adata, score_key="magnitude_rank", obs_keys=["condition"],
                            lr_prop=0.3, lrs_per_sample=20, samples_per_view=5)
-mu.tl.mofa(mdata, use_obs="union", n_factors=5, convergence_mode="medium", seed=1337, outfile="mofa.h5ad")
+muon.tl.mofa(mdata, use_obs="union", n_factors=5, convergence_mode="medium", seed=1337, outfile="mofa.h5ad")
 scores = li.ms.get_factor_scores(mdata, obsm_key="X_mofa", obs_keys=["condition"])
 loads = li.ms.get_variable_loadings(mdata, varm_key="LFs", view_sep=":", pair_sep="&", variable_sep="^")
 ```

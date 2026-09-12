@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import TYPE_CHECKING
 
 from pandas import DataFrame
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
-def _logg(message: str, level: str | None = "info", verbose: bool = False) -> None:
+def _logg(message: str, level: str | None = "info", verbose: bool | None = False) -> None:
     """
     Log a message with a specified logging level.
 
@@ -27,13 +28,17 @@ def _logg(message: str, level: str | None = "info", verbose: bool = False) -> No
         The logging level for the message (default is 'info'). Accepted levels
         are 'warn' or 'info', any other value will result in no logging.
     verbose
-        Controls whether the message is logged or not.
+        Controls whether the message is logged. `False`, the default, silences
+        `'info'` but still emits `'warn'`, since those flag data-altering
+        conditions that should not be hidden behind an opt-in flag. `None`
+        silences both.
     """
-    if verbose:
-        if level == "warn":
-            logging.warning(message)
-        elif level == "info":
-            logging.info(message)
+    if verbose is None:
+        return
+    if level == "warn":
+        warnings.warn(message, UserWarning, stacklevel=3)
+    elif verbose and level == "info":
+        logging.info(message)
 
 
 def _check_if_installed(package_name: str, custom_error_message: str | None = None) -> ModuleType:
@@ -74,6 +79,10 @@ def _get_liana_res(
     liana_res: DataFrame | None,
     uns_key: str = K.uns_key,
 ) -> DataFrame:
+    # an explicitly passed frame wins: `adata` is a required argument of some plots (`circle`),
+    # so preferring `.uns` there would leave no way to plot a frame of one's own
+    if liana_res is not None:
+        return liana_res.copy()
     if adata is not None:
         if uns_key not in adata.uns:
             raise KeyError(f"`{uns_key}` not found in `adata.uns`.")
@@ -82,6 +91,4 @@ def _get_liana_res(
         if not isinstance(res, DataFrame):
             raise TypeError(f"`adata.uns['{uns_key}']` must be a DataFrame, got {type(res).__name__}.")
         return res.copy()
-    if liana_res is not None:
-        return liana_res.copy()
     raise ValueError("`liana_res` or AnnData with `uns_key` must be provided!")

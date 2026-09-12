@@ -267,10 +267,12 @@ def misty_interactions(
     if top_n is not None:
         interactions = interactions.sort_values(by="importances", key=key, ascending=ascending)
         top_interactions = interactions.drop_duplicates(["target", "predictor"]).head(top_n)
-        interactions = interactions[
-            interactions["target"].isin(top_interactions["target"])
-            & interactions["predictor"].isin(top_interactions["predictor"])
-        ]
+        # keep the top `(target, predictor)` PAIRS; two independent `isin` tests on the
+        # marginals would draw their cross product, i.e. up to `top_n ** 2` tiles
+        keep = pd.MultiIndex.from_frame(interactions[["target", "predictor"]]).isin(
+            pd.MultiIndex.from_frame(top_interactions[["target", "predictor"]])
+        )
+        interactions = interactions[keep]
 
     p = (
         p9.ggplot(interactions, p9.aes(x="predictor", y="target", fill="importances"))

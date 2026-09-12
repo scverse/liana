@@ -60,7 +60,7 @@ class GlobalFunction:
         n_perms: int,
         mask_negatives: bool,
         seed: int,
-        verbose: bool,
+        verbose: bool | None,
     ) -> np.ndarray:
         rng = np.random.default_rng(seed)
 
@@ -114,7 +114,7 @@ class GlobalFunction:
         seed: int,
         n_perms: int | None,
         mask_negatives: bool,
-        verbose: bool,
+        verbose: bool | None,
     ) -> None:
         """
         Function caller wrapper
@@ -149,7 +149,11 @@ class GlobalFunction:
         elif self.name == "lee":
             x_dense = _zscore(x_mat)
             y_dense = _zscore(y_mat)
-            norm_weight = weight * weight
+            # Lee's L is z_y^T (W^T W) z_x / 1^T (W^T W) 1 (Lee 2001, Eq. 18); note `W @ W`
+            # coincides with `W.T @ W` only for symmetric W, which `spatial_neighbors` does
+            # not guarantee -- `max_neighbours` truncation and `standardize=True` both break it
+            lee_weight = weight.T @ weight
+            norm_weight = lee_weight if isinstance(lee_weight, np.ndarray) else csr_matrix(lee_weight)
         else:
             raise ValueError("Global function not supported")
 
@@ -174,7 +178,7 @@ class GlobalFunction:
                 weight=norm_weight, global_stat=global_stat, mask_negatives=mask_negatives
             )
         elif n_perms == 0 and self.name == "lee":
-            _logg("Global Lee does not support analytical p-values", "warning", verbose=verbose)
+            _logg("Global Lee does not support analytical p-values", "warn", verbose=verbose)
 
         xy_stats[self.name] = global_stat
         xy_stats[self.pvals_name] = global_pvals

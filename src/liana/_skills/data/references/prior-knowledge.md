@@ -16,7 +16,7 @@ res = li.rs.select_resource("consensus")     # DataFrame with columns ligand, re
 - Anything else, or a fuller mouse map:
 
 ```python
-map_df = li.rs.get_hcop_orthologs()                                      # mouse by default; downloads to cwd
+map_df = li.rs.get_hcop_orthologs()                                      # mouse by default; caches under sc.settings.datasetdir
 map_df = map_df.rename(columns={"human_symbol": "source", "mouse_symbol": "target"})
 res_mm = li.rs.translate_resource(res, map_df=map_df, columns=["ligand", "receptor"])
 ```

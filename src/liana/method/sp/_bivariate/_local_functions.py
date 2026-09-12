@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING
 
 import numba as nb
 import numpy as np
-from scipy.sparse import coo_matrix, csr_matrix
+from scipy.sparse import csr_matrix
 from scipy.stats import norm, rankdata
 from tqdm import tqdm
 
+from liana._core._common import _logg
 from liana.method.sp._bivariate._global_functions import Weight
 
 if TYPE_CHECKING:
@@ -78,7 +79,7 @@ class LocalFunction:
         n_perms: int | None,
         seed: int,
         mask_negatives: bool,
-        verbose: bool,
+        verbose: bool | None,
     ) -> tuple[np.ndarray, np.ndarray | None]:
         """
         Function caller wrapper
@@ -140,6 +141,7 @@ class LocalFunction:
                 weight=norm_weight,
                 local_truth=local_scores,
                 mask_negatives=mask_negatives,
+                verbose=verbose,
             )
 
         return local_scores, local_pvals
@@ -156,7 +158,7 @@ class LocalFunction:
         n_perms: int,
         seed: int,
         mask_negatives: bool,
-        verbose: bool,
+        verbose: bool | None,
     ) -> np.ndarray:
         rng = np.random.default_rng(seed)
 
@@ -183,6 +185,7 @@ class LocalFunction:
         local_truth: np.ndarray,
         weight: Weight,
         mask_negatives: bool,
+        verbose: bool | None,
     ) -> np.ndarray:
         """
         Local Moran's R analytical p-values as in spatialDM (Li et al., 2022)
@@ -199,6 +202,7 @@ class LocalFunction:
             Connectivity weights
         mask_negatives
             Whether to mask negative correlations pvalue
+        %(verbose)s
 
         Returns
         -------
@@ -215,17 +219,36 @@ class LocalFunction:
         x_sigma = x_sigma * spot_n / (spot_n - 1)
         y_sigma = y_sigma * spot_n / (spot_n - 1)
 
-        std = self._get_local_var(x_sigma, y_sigma, weight, spot_n)
-        local_zscores = local_truth / std
+        std = self._get_local_std(x_sigma, y_sigma, weight, spot_n)
+        # a zero null standard deviation leaves the z-score nan. Two conditions get there:
+        # a spot with no neighbours and no self-weight, or a constant variable (sigma == 0),
+        # which zeroes the variance of every spot at once -- the remedies differ, so say which
+        degenerate = int((std == 0).all(axis=1).sum())
+        if degenerate:
+            cause = (
+                "every x/y pair has a constant side (sigma == 0)"
+                if ((x_sigma == 0) | (y_sigma == 0)).all()
+                else "they have no neighbours and no self-weight -- lower `cutoff`, raise "
+                "`bandwidth`, or use `set_diag=True` in `li.pp.spatial_neighbors`"
+            )
+            _logg(
+                f"{degenerate} spot(s) have a null standard deviation of 0 for every variable pair, "
+                f"so local Moran's R has no null distribution there and their analytical p-values "
+                f"are nan: {cause}.",
+                "warn",
+                verbose=verbose,
+            )
+        with np.errstate(invalid="ignore", divide="ignore"):
+            local_zscores = local_truth / std
 
         if mask_negatives:
             local_zpvals = norm.sf(local_zscores)
         else:
-            local_zpvals = norm.sf(np.abs(local_zscores))
+            local_zpvals = norm.sf(np.abs(local_zscores)) * 2
 
         return np.asarray(local_zpvals)
 
-    def _get_local_var(
+    def _get_local_std(
         self,
         x_sigma: np.ndarray,
         y_sigma: np.ndarray,
@@ -233,7 +256,21 @@ class LocalFunction:
         spot_n: int,
     ) -> np.ndarray:
         """
-        Spatial weight variance as in spatialDM (Li et al., 2022)
+        Null standard deviation of local Moran's R, as in spatialDM (Li et al., 2022)
+
+        For ``R_i = x_i (Wy)_i + y_i (Wx)_i`` with x, y i.i.d. and zero-mean, the null
+        variance is ``2 (n-1)^2/n^2 sigma_x^2 sigma_y^2 (sum_j w_ij^2 + w_ii^2)``
+        (Li et al., 2023, Supplementary Note 1, eq. 31), where ``sigma`` is the
+        ``n/(n-1)``-inflated population standard deviation ``_zscore_pvals`` passes in --
+        so the two ``n``-dependent factors leave a net ``n^2/(n-1)^2`` on the variance.
+
+        Note this deviates from spatialDM, which hardcodes the ``w_ii`` contribution to 1
+        (``compute_var_local``'s ``wii`` argument, zeroed only when ``single_cell=True``).
+        That value assumes an unnormalised unit diagonal, but spatialDM normalises its
+        weights afterwards, so the assumed and actual diagonals disagree and the analytical
+        p-values come out far too conservative. We instead take ``w_ii`` from the weight
+        matrix itself, which is correct for any diagonal, including the zero diagonal
+        produced by ``spatial_neighbors``' default ``set_diag=False``.
 
         Parameters
         ----------
@@ -250,23 +287,30 @@ class LocalFunction:
         -------
         2D array of standard deviations with shape(n_spot, xy_n)
         """
-        dense = weight if isinstance(weight, np.ndarray) else np.asarray(weight.todense())
-
-        weight_sq = (dense**2).sum(axis=1)
+        # kept sparse; densifying the weights here costs O(n^2) and is infeasible at scale
+        if isinstance(weight, np.ndarray):
+            weight_sq = (weight**2).sum(axis=1)
+            diag = np.diagonal(weight)
+        else:
+            weight_sq = np.asarray(weight.multiply(weight).sum(axis=1)).ravel()
+            diag = weight.diagonal()
 
         dim = 2 * (spot_n - 1) ** 2 / spot_n**2
-        sigma_prod = x_sigma * y_sigma
-        core = dim * sigma_prod
+        core = dim * x_sigma**2 * y_sigma**2
 
-        var = np.multiply.outer(weight_sq, core) + core
+        var = np.multiply.outer(weight_sq + diag**2, core)
 
         return np.asarray(var**0.5)
 
     def _norm_max(self, X: np.ndarray | csr_matrix, axis: int = 0) -> np.ndarray:
-        maxima = X.max(axis=axis)
-        dense_max = maxima.toarray() if isinstance(maxima, csr_matrix | coo_matrix) else maxima
-        zscored = _zscore(X / dense_max, axis=axis)
+        # NOTE: no max-scaling here. `_zscore` is scale- and shift-invariant, so dividing
+        # by the column max is a no-op for strictly positive data, but it flips the sign of
+        # every z-score for an all-negative column and yields inf/nan -- silently zeroed by
+        # the mapping below -- whenever the max is 0. `x_layer`/`y_layer` are public and
+        # `block_negatives` never runs on this path, so negatives do reach here.
+        zscored = _zscore(X, axis=axis)
 
+        # a genuinely constant column centres to 0 and divides by 0 -> nan
         return np.where(np.isnan(zscored), 0, zscored)
 
     @classmethod
@@ -279,25 +323,54 @@ class LocalFunction:
         return cls.instances[name]
 
 
+@nb.njit(nb.float32[:](nb.float32[:]), cache=True)
+def _midranks(x: np.ndarray) -> np.ndarray:
+    """Ranks with ties averaged, as in ``scipy.stats.rankdata(x, method="average")`` on finite input.
+
+    ``argsort().argsort()`` gives *ordinal* ranks, which split tied values in whatever
+    order the sort happened to visit them -- so on tied (i.e. all expression) data the
+    statistic depends on cell ordering. Spearman requires midranks.
+    """
+    n = x.shape[0]
+    order = np.argsort(x)
+    ranks = np.empty(n, dtype=np.float32)
+
+    i = 0
+    while i < n:
+        j = i + 1
+        while (j < n) and (x[order[j]] == x[order[i]]):
+            j += 1
+        # 1-based ranks i+1..j averaged over the tied run; `_wcorr` is shift-invariant,
+        # so the 1-based convention only matters for matching scipy
+        avg = np.float32(0.5 * (i + j + 1))
+        for k in range(i, j):
+            ranks[order[k]] = avg
+        i = j
+
+    return ranks
+
+
 @nb.njit(nb.float32(nb.float32[:], nb.float32[:], nb.float32[:], nb.float32), cache=True)
 def _wcorr(x: np.ndarray, y: np.ndarray, w: np.ndarray, wsum: float) -> float:
 
-    x = np.argsort(x).argsort().astype(np.float32)
-    y = np.argsort(y).argsort().astype(np.float32)
+    x = _midranks(x)
+    y = _midranks(y)
 
     wx = w * x
     wy = w * y
 
     numerator = wsum * sum(wx * y) - sum(wx) * sum(wy)
 
-    denominator_x = wsum * sum(w * (x**2)) - sum(wx) ** 2
-    denominator_y = wsum * sum(w * (y**2)) - sum(wy) ** 2
-    denominator = denominator_x * denominator_y
+    ss_x = wsum * sum(w * (x**2))
+    ss_y = wsum * sum(w * (y**2))
+    denominator_x = ss_x - sum(wx) ** 2
+    denominator_y = ss_y - sum(wy) ** 2
 
-    if (denominator == 0) or (numerator == 0):
+    # constant neighbourhood -> no variance
+    if (denominator_x <= 1e-6 * ss_x) or (denominator_y <= 1e-6 * ss_y) or (numerator == 0):
         return 0.0
 
-    corr: float = numerator / (denominator**0.5)
+    corr: float = numerator / ((denominator_x * denominator_y) ** 0.5)
     return corr
 
 
@@ -459,7 +532,7 @@ _bivariate_functions = [
         name="product",
         metadata="simple weighted product",
         fun=_product,
-        reference="If vars are z-scaled = Lee's static (Lee 2021;J.Geograph.Syst.)",
+        reference="If vars are z-scaled = Lee's statistic (Lee 2001;J.Geograph.Syst.)",
     ),
     LocalFunction(
         name="norm_product",

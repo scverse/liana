@@ -16,7 +16,7 @@ def _get_group_mean(
     X: csr_matrix,
     groupby_labels: pd.Series | np.ndarray,
     var_names: pd.Index,
-    groups_order: list[str] | None = None,
+    groups_order: pd.Index | None = None,
 ) -> pd.DataFrame:
     s = pd.Series(groupby_labels)
     groups_dum = pd.get_dummies(s, dummy_na=False)
@@ -29,7 +29,11 @@ def _get_group_mean(
     arr = result.toarray()
     df_raw = pd.DataFrame(arr, index=groups_dum.columns, columns=var_names)
 
-    return df_raw
+    # `pd.get_dummies` orders its columns by category for a Categorical and lexicographically for
+    # an object array, so the observed statistic and the permutations index their rows differently
+    # unless both are reindexed onto one order. `groups_order`'s own type carries through, so a
+    # `pd.CategoricalIndex` keeps the labels categorical (and in category order) in the output.
+    return df_raw.reindex(groups_order) if groups_order is not None else df_raw
 
 
 @d.dedent
@@ -40,7 +44,7 @@ def compute_global_specificity(
     n_perms: int = V.n_perms,
     seed: int = V.seed,
     n_jobs: int = -1,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
     use_raw: bool = V.use_raw,
     layer: str | None = V.layer,
     uns_key: str = "global_interactions",
@@ -91,8 +95,16 @@ def compute_global_specificity(
 
     X = _choose_mtx_rep(adata, layer=layer, use_raw=use_raw)
     var_names = adata.var_names
-    original_groupby_labels = get_obs(adata)[groupby].astype("category")
-    groups_order = list(original_groupby_labels.cat.categories)
+    # an unused category (a `min_cells` drop leaves those behind) would give an all-zero observed
+    # row and, once the permuted frames are reindexed on `groups_order`, an all-NaN permuted row.
+    obs_labels = get_obs(adata)[groupby]
+    original_groupby_labels = obs_labels.astype("category").cat.remove_unused_categories()
+    # A categorical `groupby` is reindexed on a `pd.CategoricalIndex` so that the stored frame keeps
+    # the labels' dtype and category order -- a plain index would leave downstream plots sorting
+    # their axes alphabetically. A non-categorical `groupby` keeps its plain labels.
+    groups_order: pd.Index = original_groupby_labels.cat.categories
+    if isinstance(obs_labels.dtype, pd.CategoricalDtype):
+        groups_order = pd.CategoricalIndex(groups_order, dtype=original_groupby_labels.dtype)
 
     # Compute observed statistic
     df_obs = _get_group_mean(X, original_groupby_labels, var_names, groups_order=groups_order)

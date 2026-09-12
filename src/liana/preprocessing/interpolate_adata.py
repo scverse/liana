@@ -21,7 +21,7 @@ def interpolate_adata(
     use_raw: bool = V.use_raw,
     method: Literal["linear", "nearest", "cubic"] = "linear",
     fill_value: float = 0,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
 ) -> AnnData:
     """
     Interpolates spatial data from a target AnnData object to a reference AnnData object based on spatial coordinates.

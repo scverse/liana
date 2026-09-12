@@ -46,6 +46,8 @@ attributes, to describe each method instance, and are callable:
     show_methods
     get_method_scores
     process_scores
+    AggregateClass
+    aggregate_meta
 ```
 
 ### Local bivariate metrics

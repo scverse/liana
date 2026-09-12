@@ -91,6 +91,10 @@ _resource_name = """\
 resource_name
     Name of the resource to be used for ligand-receptor inference. See `li.rs.show_resources()` for available resources."""
 
+_db_path = """\
+db_path
+    Path to the SQLite database file. If None, the database is fetched into `scanpy.settings.datasetdir` and reused from there."""
+
 _sample_key = """\
 sample_key
     key in `adata.obs` to use for grouping by sample or context."""
@@ -118,7 +122,9 @@ inplace
 
 _verbose = """\
 verbose
-    Verbosity flag."""
+    Verbosity flag. `False`, the default, hides progress and info messages but
+    still warns about data-altering conditions; `True` shows both; `None`
+    silences everything, warnings included."""
 
 _lr_sep = """\
 lr_sep
@@ -167,6 +173,12 @@ return_all_lrs
     Bool whether to return all ligand-receptor pairs, or only those that surpass the `expr_prop`
     threshold. Ligand-receptor pairs that do not pass the `expr_prop` threshold will be assigned
     to the *worst* score of the ones that do. `False` by default."""
+
+_supp_columns = """\
+supp_columns
+    Additional columns to be added from any of the methods implemented in liana,
+    or any of the columns returned by `scanpy.tl.rank_genes_groups`, each starting with ligand_* or receptor_*.
+    For example, `['ligand_pvals', 'receptor_pvals']`. None by default."""
 
 _de_method = """\
 de_method
@@ -312,7 +324,8 @@ cell_types
 # Plot docstrings
 _liana_res = """\
 liana_res
-    `liana_res` a `DataFrame` in liana's format.
+    `liana_res` a `DataFrame` in liana's format. Where an `adata` is accepted too, a frame passed
+    here takes precedence over `adata.uns[uns_key]`, which is only read when this is `None`.
 """
 
 _colour = """\
@@ -347,7 +360,12 @@ orderby_absolute
 
 _filter_fn = """\
 filter_fn
-    A function, applied along the columns (axis=1), used to filter the results to be plotted.
+    A function, applied along the columns (axis=1) of the results, used to filter the results to
+    be plotted. In `dotplot` and `tileplot` it selects *interactions* rather than rows: an
+    interaction (`ligand_complex` -> `receptor_complex`) is kept whenever the predicate holds for
+    any of its source-target pairs, and is then plotted for all of them, so rows that fail the
+    predicate are drawn alongside those that pass. `circle` with `pivot_mode='mean'` widens the
+    same way, while `circle` with `pivot_mode='counts'` and the misty plots filter row-wise.
 """
 
 _aggregate_fn = """\
@@ -407,6 +425,7 @@ d = DocstringProcessor(
     resource=_resource,
     interactions=_interactions,
     resource_name=_resource_name,
+    db_path=_db_path,
     sample_key=_sample_key,
     key_added=_key_added,
     use_raw=_use_raw,
@@ -422,6 +441,7 @@ d = DocstringProcessor(
     min_cells=_min_cells,
     base=_base,
     return_all_lrs=_return_all_lrs,
+    supp_columns=_supp_columns,
     liana_res=_liana_res,
     de_method=_de_method,
     source_key=_source_key,

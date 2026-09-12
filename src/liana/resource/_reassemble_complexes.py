@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-from liana._core._common import _logg
 from liana._core._docs import d
 
 
@@ -34,6 +33,11 @@ def _filter_reassemble_complexes(
     complex_policy
         approach by which the complexes are reassembled
 
+    Raises
+    ------
+    ValueError
+        If no ligand-receptor pair passes `expr_prop`.
+
     Return
     -----------
     lr_res: a reduced long-format pandas dataframe
@@ -47,16 +51,23 @@ def _filter_reassemble_complexes(
         .agg(prop_min=complex_policy)
         .reset_index()
     )
-    expressed = expressed[expressed["prop_min"] >= expr_prop]
+    kept = expressed[expressed["prop_min"] >= expr_prop]
+    # an empty `expressed` leaves the callers to fail obscurely much later (a `KeyError` on a
+    # score column, an `IndexError` while indexing the permutation tensor, or silently 0 rows),
+    # and `return_all_lrs=True` hides it further by re-appending every filtered-out interaction
+    if kept.empty and not expressed.empty:
+        raise ValueError(
+            f"No ligand-receptor pair passed `expr_prop={expr_prop}`: the highest minimum subunit "
+            f"proportion is {expressed['prop_min'].max():.3g}. Lower `expr_prop`. Note that "
+            "`return_all_lrs=True` does not help here -- there is no score to fill the rest with."
+        )
+    expressed = kept
 
     if not return_all_lrs:
         lr_res = lr_res.merge(expressed, how="inner", on=_key_cols)
     else:
         expressed["lrs_to_keep"] = True
         lr_res = lr_res.merge(expressed, how="left", on=_key_cols)
-        # deal with duplicated subunits
-        # subunits that are not expressed might not represent the most relevant subunit
-        lr_res.drop_duplicates(subset=_key_cols, inplace=True)
         # chained inplace assignment is a no-op under copy-on-write
         # `~` on an object-dtype bool is a bitwise not, so `~True == -2`
         lr_res["lrs_to_keep"] = lr_res["lrs_to_keep"].fillna(value=False).astype(bool)
@@ -68,24 +79,10 @@ def _filter_reassemble_complexes(
     for col in complex_cols:
         lr_res = _reduce_complexes(col=col, lr_res=lr_res, key_cols=_key_cols, aggs=aggs)
 
-    # check if there are any duplicated subunits
-    duplicate_mask = lr_res.duplicated(subset=_key_cols, keep=False)
-    if duplicate_mask.any():
-        # check if there are any non-equal subunit values
-        if (
-            not lr_res[duplicate_mask]
-            .groupby(_key_cols)[complex_cols]
-            .transform(lambda x: x.duplicated(keep=False))
-            .all()
-            .all()
-        ):
-            _logg(
-                "There were duplicated subunits in the complexes. "
-                + "The subunits were reduced to only the minimum expression subunit. "
-                + "However, there were subunits that were not the same within a complex. ",
-                level="warn",
-            )
-        lr_res = lr_res.drop_duplicates(subset=_key_cols, keep="first")
+    # Each `_reduce_complexes` pass keeps only the rows tied at that column's per-key minimum, so a
+    # key survives more than once only with identical `complex_cols` values -- ties, from which any
+    # row will do. Downstream expects one row per key.
+    lr_res = lr_res.drop_duplicates(subset=_key_cols, keep="first")
 
     return lr_res
 

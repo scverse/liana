@@ -171,8 +171,10 @@ def test_misty_nonaligned(toy_spatial: AnnData) -> None:
     intra.var.index = "x" + intra.var.index
     para = toy_spatial[: int(toy_spatial.n_obs * 0.9), -10:].copy()
     para.var.index = "y" + para.var.index
-    # Generate connectivities with shape (para.n_obs, intra.n_obs)
-    para.obsm["spatial_connectivities"] = np.ones((para.n_obs, intra.n_obs))
+    # Generate connectivities with shape (para.n_obs, intra.n_obs). They must vary across rows:
+    # an all-ones matrix makes every row of the weighted matrix identical, so every predictor is a
+    # non-zero constant and the constant-predictor guard rejects the view.
+    para.obsm["spatial_connectivities"] = np.random.default_rng(0).random((para.n_obs, intra.n_obs))
     misty = MistyData(
         {"intra": intra, "ydata": para},
         enforce_obs=False,  # NOTE: This is the key parameter
@@ -193,3 +195,36 @@ def test_misty_nonaligned_sparse(toy_spatial: AnnData) -> None:
     misty = MistyData({"intra": intra, "ydata": para}, enforce_obs=False)
     assert misty.get_weighted_matrix("ydata").shape == (intra.n_obs, para.n_vars)
     misty(model=LinearModel, k_cv=3)
+
+
+@pytest.mark.parametrize("model_cls", [LinearModel, RobustLinearModel])
+def test_single_view_model_constant_column_fails_loudly(
+    model_cls: type[LinearModel] | type[RobustLinearModel],
+) -> None:
+    """A non-zero constant predictor is rejected by name, not by a bare `zip()` message."""
+    rng = np.random.default_rng(0)
+    n = 12
+    # column 0 is a non-zero constant, so `add_constant` would return X unchanged and
+    # `tvalues[1:]` would be one element short of `predictors`
+    X = np.column_stack([np.full(n, 5.0), rng.normal(size=n)])
+    y = rng.normal(size=n)
+
+    with pytest.raises(ValueError, match=r"\['const_gene'\] are non-zero constants"):
+        model_cls(seed=42).fit(y=y, X=X, predictors=["const_gene", "varying_gene"], k_cv=3)
+
+
+def test_robust_linear_model_integer_target_keeps_float_predictions() -> None:
+    """`np.zeros_like(y)` used to truncate every fold's predictions for an integer layer."""
+    rng = np.random.default_rng(0)
+    n = 30
+    X = rng.normal(size=(n, 2))
+    y = (X @ np.array([3.0, -2.0]) + 20).round().astype(np.int64)
+
+    model = RobustLinearModel(seed=42)
+    model.fit(y=y, X=X, predictors=["a", "b"], k_cv=3)
+
+    predictions = model.predictions
+    assert predictions is not None
+    assert np.issubdtype(predictions.dtype, np.floating)
+    # truncation would have left every prediction integral
+    assert not np.all(predictions == np.round(predictions))

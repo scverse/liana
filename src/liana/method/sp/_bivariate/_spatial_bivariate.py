@@ -63,7 +63,7 @@ class SpatialBivariate:
         remove_self_interactions: bool = True,
         complex_sep: None | str = "_",
         xy_sep: str = V.lr_sep,
-        verbose: bool = V.verbose,
+        verbose: bool | None = V.verbose,
         **kwargs: Any,
     ) -> AnnData | pd.DataFrame | None:
         """
@@ -153,7 +153,9 @@ class SpatialBivariate:
         One column per ligand-receptor pair that passed the expression filters, named
         `'ligand^receptor'`. `n_perms=0` uses the analytical p-values available for
         Moran's R -- a positive integer runs that many permutations instead, `None`
-        skips them.
+        skips them. The analytical route is a normal approximation on a heavy-tailed
+        statistic: calibrated near `p < 0.05` but increasingly anti-conservative below
+        it, so prefer it for exploration and `n_perms > 0` for p-values you report.
 
         ``li.mt.bivariate.show_functions()`` lists the available `local_name` choices.
         Pass a `MuData` with `x_mod`/`y_mod` instead of an `AnnData` to relate two

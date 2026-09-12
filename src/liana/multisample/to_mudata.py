@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import warnings
-
 import numpy as np
 import pandas as pd
 from anndata import AnnData
@@ -25,7 +23,7 @@ def adata_to_views(
     obs_keys: list[str] | None = None,
     view_sep: str = ":",
     keep_stats: bool = False,
-    verbose: bool = False,
+    verbose: bool | None = False,
     psbulk_kwargs: dict[str, object] | None = None,
     filter_samples_kwargs: dict[str, object] | None = None,
     filter_by_expr_kwargs: dict[str, object] | None = None,
@@ -132,6 +130,12 @@ def adata_to_views(
             del padata.obs
             padatas[view] = padata
 
+    if not padatas:
+        raise ValueError(
+            "No modalities passed the filtering criteria. Consider relaxing `filter_samples_kwargs`, "
+            "`filter_by_expr_kwargs` or `filter_by_prop_kwargs`."
+        )
+
     # Convert to MuData
     mdata = MuData(padatas)
 
@@ -168,7 +172,7 @@ def lrs_to_views(
     target_key: str = P.target,
     ligand_key: str = P.ligand_complex,
     receptor_key: str = P.receptor_complex,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
 ) -> MuData:
     """
     Converts a LIANA result to a MuData object with views that represent an aggregate for each entity in `adata.obs[groupby]`.
@@ -333,6 +337,12 @@ def lrs_to_views(
             temp = _dataframe_to_anndata(lrs_wide)
             if temp.shape[0] >= samples_per_view:  # check if enough samples
                 lr_adatas[view] = temp
+    if not lr_adatas:
+        raise ValueError(
+            "No modalities passed the filtering criteria. Consider relaxing `lr_prop`, `lrs_per_view`, "
+            "`lrs_per_sample`, `samples_per_view` or `min_variance`."
+        )
+
     # to mdata
     mdata = MuData(lr_adatas)
 
@@ -349,7 +359,7 @@ def lrdata_to_mudata(
     min_cells: int | None = V.min_cells,
     min_features: int | None = 10,
     obs_keys: list[str] | None = None,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
 ) -> MuData:
     """
     Convert an inflow score AnnData object to a MuData object, where each modality corresponds to a unique sender cell type.
@@ -485,13 +495,10 @@ def _remove_mod_var(
         # markers in markers dict for each modality except for current_mod
         negative_markers = [marker for mod in markers.keys() if mod != current_mod for marker in markers[mod]]
 
-        if current_mod not in list(markers.keys()):
-            warnings.warn(f"no markers in dict for view: {current_mod}", UserWarning, stacklevel=2)
-        else:
-            # keep negative_markers not in markers[current_mod] and add view_sep
-            negative_markers = [
-                current_mod + view_sep + marker for marker in negative_markers if marker not in markers[current_mod]
-            ]
+        # keep negative_markers not in markers[current_mod] and add view_sep
+        negative_markers = [
+            current_mod + view_sep + marker for marker in negative_markers if marker not in markers[current_mod]
+        ]
 
         modality = mods[current_mod]
         if not isinstance(modality, AnnData):
@@ -525,7 +532,9 @@ def filter_view_markers(
     ----------
     %(mdata)s
     markers
-        Dictionary with markers for each view. Keys are the views and values are lists of markers. Can contain markers for views that are not in mdata.mod.keys().
+        Dictionary with markers for each view. Keys are the views and values are lists of markers. Every view in
+        ``mdata.mod`` must be a key -- pass an empty list for a view without markers -- while extra keys for views
+        that are not in ``mdata.mod.keys()`` are allowed.
     view_sep
         Separator between view and gene names. Defaults to ':'.
     var_column
@@ -580,6 +589,17 @@ def filter_view_markers(
     # check that all keys in markers are lists
     if not all(isinstance(markers[mod], list) for mod in markers.keys()):
         raise TypeError("not all values in markers are lists")
+
+    # A view absent from `markers` has no markers of its own to protect, and the negative markers
+    # collected per view would stay unprefixed -- `is_negative` would then be all-False and the view
+    # silently unfiltered. Checked here, so `inplace=False` does not copy the whole MuData first.
+    missing = [mod for mod in mdata.mod if mod not in markers]
+    if missing:
+        raise ValueError(
+            f"`markers` has no entry for the view(s) {missing}. Every view in `mdata.mod` must be keyed, "
+            "since a view's own markers are what keeps them from being filtered out of it; "
+            "pass an empty list for a view that has none."
+        )
 
     # check that var_column is in var for all modalities
     if var_column is not None:

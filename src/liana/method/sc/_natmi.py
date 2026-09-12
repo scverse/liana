@@ -1,5 +1,6 @@
 from pandas import DataFrame, Series
 
+from liana._core._common import _logg
 from liana.method.sc._Method import Method, MethodMeta
 
 
@@ -20,6 +21,14 @@ def _natmi_score(x: DataFrame) -> tuple[Series, Series]:
 
     # specificity
     spec_weight = _spec_weight(x["ligand_means"], x["ligand_means_sums"], x["receptor_means"], x["receptor_means_sums"])
+    # the normaliser sums over the labels in the run, so a single source or target leaves nothing to normalise against
+    for what in ("ligand", "receptor"):
+        if x[f"{what}_means"].eq(x[f"{what}_means_sums"]).all():
+            _logg(
+                f"NATMI's `spec_weight` is 1 for every {what}: only one {'source' if what == 'ligand' else 'target'} "
+                "label is in the run (e.g. a single `groupby_pairs` pair), so specificity cannot be normalised.",
+                level="warn",
+            )
 
     return expr_prod, spec_weight
 

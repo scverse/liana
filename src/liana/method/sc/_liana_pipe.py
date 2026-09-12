@@ -17,7 +17,7 @@ from liana._core._constants import MethodColumns as M
 from liana._core._constants import PrimaryColumns as P
 from liana._core._docs import d
 from liana._core._pipe_utils import assert_covered, filter_resource, prep_check_adata
-from liana._core._pipe_utils._aggregate import _aggregate
+from liana._core._pipe_utils._aggregate import _aggregate, _assign_min_or_max
 from liana._core._pipe_utils._common import _get_groupby_subset, _get_props, _join_stats
 from liana._core._pipe_utils._get_mean_perms import Aggregation, _get_mat_idx, _get_means_perms, _trimean
 from liana._core._pipe_utils._pre import _choose_mtx_rep
@@ -73,7 +73,7 @@ def _prepare_lr_stats(
     min_cells: int,
     base: float,
     de_method: DeMethod,
-    verbose: bool,
+    verbose: bool | None,
     use_raw: bool,
     layer: str | None,
     complex_cols: list[str],
@@ -133,6 +133,7 @@ def _prepare_lr_stats(
         use_raw=use_raw,
         layer=layer,
         obsm=adata.obsm if spatial_key else None,
+        block_negatives=True,
         verbose=verbose,
     )
 
@@ -196,7 +197,7 @@ def _add_proximity(
     adata: AnnData,
     spatial_key: str,
     spatial_kwargs: SpatialKwargs | None,
-    verbose: bool,
+    verbose: bool | None,
 ) -> pd.DataFrame:
     """Attach a per-cluster-pair spatial proximity weight to ``lr_res``.
 
@@ -230,7 +231,7 @@ def liana_pipe(
     de_method: DeMethod,
     n_perms: int | None,
     seed: int,
-    verbose: bool,
+    verbose: bool | None,
     use_raw: bool,
     n_jobs: int,
     layer: str | None,
@@ -264,8 +265,7 @@ def liana_pipe(
     score
         The method to score the interactions with. `None` returns the ligand-receptor
         statistics without scoring them.
-    supp_columns
-        Additional columns to be added to the output of each method.
+    %(supp_columns)s
     %(return_all_lrs)s
     %(spatial_key)s
     %(spatial_kwargs)s
@@ -340,13 +340,14 @@ def liana_pipe_consensus(
     de_method: DeMethod,
     n_perms: int | None,
     seed: int,
-    verbose: bool,
+    verbose: bool | None,
     use_raw: bool,
     n_jobs: int,
     layer: str | None,
     consensus: AggregateClass,
     consensus_opts: list[str] | Literal[False] | None = None,
     aggregate_method: Literal["rra", "mean"] = "rra",
+    supp_columns: list[str] | None = None,
     return_all_lrs: bool = False,
     spatial_key: str | None = None,
     spatial_kwargs: SpatialKwargs | None = None,
@@ -382,6 +383,7 @@ def liana_pipe_consensus(
         and `'Magnitude'`. `False` returns each method's results untouched.
     aggregate_method
         RobustRankAggregate (`'rra'`) or mean rank (`'mean'`).
+    %(supp_columns)s
     %(return_all_lrs)s
     %(spatial_key)s
     %(spatial_kwargs)s
@@ -392,7 +394,7 @@ def liana_pipe_consensus(
     A DataFrame of aggregated ligand-receptor results, or -- when `consensus_opts` is
     `False` -- a DataFrame per method, keyed by method name.
     """
-    add_cols = consensus.add_cols + _SUBUNIT_COLS
+    add_cols = consensus.add_cols + _SUBUNIT_COLS + (supp_columns or [])
 
     adata, lr_res = _prepare_lr_stats(
         adata=adata,
@@ -427,13 +429,18 @@ def liana_pipe_consensus(
             _score=method,
             _key_cols=P.primary,
             _complex_cols=method.complex_cols,
-            _add_cols=method.add_cols,
+            # `_SUBUNIT_COLS` carries the per-entity columns (`ligand`/`receptor` and their
+            # `props`) that the aggregate keeps alongside the scores, and `supp_columns` whatever
+            # else was asked for; without them `_run_method` narrows them away before `_aggregate`
+            # ever sees them
+            _add_cols=method.add_cols + _SUBUNIT_COLS + (supp_columns or []),
             n_perms=n_perms,
             seed=seed,
             return_all_lrs=return_all_lrs,
             n_jobs=n_jobs,
             verbose=verbose,
             _aggregate_flag=True,
+            _supp_columns=supp_columns,
         )
 
     if consensus_opts is False:
@@ -443,7 +450,11 @@ def liana_pipe_consensus(
         lrs,
         consensus=consensus,
         aggregate_method=aggregate_method,
-        _key_cols=P.primary,
+        # NB: keep the primary key. `ligand`/`receptor` must NOT join: complexes are reassembled
+        # per method (`_run_method`), so a method with a different `complex_cols` -- `cellchat`
+        # reduces by `*_trimean`, every other method by `*_means` -- can keep a different subunit
+        # of the same complex. Joining on them would split one interaction into two rows, each
+        # `NaN` in the other method's scores. They ride along as payload instead, leftmost wins.
         _consensus_opts=consensus_opts,
         verbose=verbose,
     )
@@ -473,7 +484,7 @@ def _get_lr(
     mat_max: np.float32 | None,
     de_method: DeMethod,
     base: float,
-    verbose: bool,
+    verbose: bool | None,
 ) -> pd.DataFrame:
     labels = get_obs(adata)[I.label].cat.categories
 
@@ -485,9 +496,9 @@ def _get_lr(
     logfc_flag = (M.ligand_logfc in relevant_cols) | (M.receptor_logfc in relevant_cols)
     if logfc_flag:
         if "log1p" in adata.uns_keys():
-            if (adata.uns["log1p"]["base"] is not None) & verbose:
+            if (adata.uns["log1p"]["base"] is not None) & bool(verbose):
                 print("Assuming that counts were `natural` log-normalized!")
-        elif ("log1p" not in adata.uns_keys()) & verbose:
+        elif ("log1p" not in adata.uns_keys()) & bool(verbose):
             print("Assuming that counts were `natural` log-normalized!")
         # `prep_check_adata` upstream guarantees a csr matrix.
         normcounts = _choose_mtx_rep(adata).copy()
@@ -586,6 +597,22 @@ def _calc_log2fc(adata: AnnData, label: str) -> np.ndarray:
 
 
 def _expm1_base(X: np.ndarray, base: float) -> np.ndarray:
+    """Invert a ``log1p``-in-``base`` transform, i.e. ``base ** X - 1``.
+
+    Raises
+    ------
+    ValueError
+        If the inversion would overflow, which means `X` was never log-transformed in `base`.
+    """
+    # `base ** x` is monotonic, so the largest entry decides whether anything overflows.
+    # `base <= 1` cannot overflow for non-negative `X`.
+    if X.size and base > 1:
+        limit = np.log(np.finfo(np.result_type(base, X.dtype)).max) / np.log(base)
+        if (peak := float(X.max())) > limit:
+            raise ValueError(
+                f"mat contains values too large to have been log-transformed (maximum: {peak:.6g}). "
+                "Pass log-normalised counts via `use_raw=True`, `layer=...`, or place them in `.X`."
+            )
     return np.asarray(np.power(base, X) - 1)
 
 
@@ -602,8 +629,9 @@ def _run_method(
     seed: int,
     return_all_lrs: bool,
     n_jobs: int,
-    verbose: bool,
+    verbose: bool | None,
     _aggregate_flag: bool = False,  # relevant for rank_aggregate
+    _supp_columns: list[str] | None = None,  # relevant for rank_aggregate
 ) -> pd.DataFrame:
     # re-assemble complexes - specific for each method
     lr_res = _filter_reassemble_complexes(
@@ -684,13 +712,23 @@ def _run_method(
         if _score.magnitude is not None:
             fill_value = _assign_min_or_max(lr_res[_score.magnitude], _score.magnitude_ascending)
             lr_res.loc[~lr_res[I.lrs_to_keep], _score.magnitude] = fill_value
-        if _score.specificity is not None:
+        # `n_perms=None` leaves a permutation-based specificity entirely unset -- there is no
+        # observed value to fall back on, and the column is dropped below anyway.
+        if _score.specificity is not None and not lr_res[_score.specificity].isna().all():
             fill_value = _assign_min_or_max(lr_res[_score.specificity], _score.specificity_ascending)
             lr_res.loc[~lr_res[I.lrs_to_keep], _score.specificity] = fill_value
 
     score_cols = [name for name in (_score.magnitude, _score.specificity) if name is not None]
-    if _aggregate_flag:  # if consensus keep only the keys and the method scores
-        lr_res = lr_res[_key_cols + score_cols]
+    if _aggregate_flag:
+        # keep the keys, the per-entity statistics every method shares, whatever `supp_columns`
+        # asked for, and this method's scores, so that the methods' own intermediates
+        # (`*_zscores`, `*_means_sums`, `*_logfc`, `mat_mean`) stay out of the aggregate unless
+        # they were requested. Its column set and order still follow `methods=` -- `cellchat`
+        # contributes no `*_means`, and each method appends its own scores in turn.
+        keep = dict.fromkeys(
+            [*P.complete, C.ligand_means, C.receptor_means, C.ligand_props, C.receptor_props, *(_supp_columns or [])]
+        )
+        lr_res = lr_res[[col for col in keep if col in lr_res.columns] + score_cols]
     if _score.specificity is not None:  # when n_perms is None
         if lr_res[_score.specificity].isna().all():
             lr_res = lr_res.drop(_score.specificity, axis=1)
@@ -699,10 +737,6 @@ def _run_method(
         lr_res = lr_res.drop(C.proximity, axis=1)
 
     return lr_res
-
-
-def _assign_min_or_max(x: pd.Series, x_ascending: bool | None) -> float:
-    return float(np.max(x) if x_ascending else np.min(x))
 
 
 def _cluster_stats(adata: AnnData) -> pd.DataFrame:

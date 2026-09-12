@@ -30,7 +30,14 @@ def test_check_var(liana_res: DataFrame) -> None:
 def test_get_liana_res(toy_adata: AnnData, liana_res: DataFrame) -> None:
     toy_adata.uns["liana_res"] = liana_res
 
-    # `adata` takes precedence, and the result is a copy
+    # an explicitly passed frame takes precedence over `adata.uns[uns_key]`, since `adata` is
+    # required by some plots and would otherwise leave no way to plot a frame of one's own
+    subset = liana_res.head(3)
+    both = _get_liana_res(toy_adata, liana_res=subset)
+    assert both.equals(subset)
+    assert both is not subset
+
+    # ... and `adata` is read when no frame is given, also as a copy
     from_adata = _get_liana_res(toy_adata, liana_res=None)
     assert from_adata.equals(liana_res)
     assert from_adata is not liana_res

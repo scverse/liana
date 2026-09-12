@@ -49,6 +49,19 @@ def test_get_funs(mdata: MuData) -> None:
     assert scores.shape == (4, 6)
 
 
+def test_get_factor_scores_duplicate_obs_names() -> None:
+    """Duplicated `obs_names` used to cross-join the metadata onto the factor scores."""
+    obs = pd.DataFrame({"group": ["a", "b", "c", "d"]}, index=["x", "x", "y", "z"])
+    adata = AnnData(np.zeros((4, 2), dtype=np.float32), obs=obs)
+    adata.obsm["X_mofa"] = np.arange(12, dtype=np.float64).reshape(4, 3)
+
+    scores = get_factor_scores(adata, obsm_key="X_mofa", obs_keys=["group"])
+
+    assert scores.shape == (4, 5)
+    assert scores["group"].tolist() == ["a", "b", "c", "d"]
+    np.testing.assert_array_equal(scores[["Factor1", "Factor2", "Factor3"]].to_numpy(), adata.obsm["X_mofa"])
+
+
 def test_get_variable_loadings_from_loadings() -> None:
     # MOFA-Flex-style weights: dict of per-view features-by-factors DataFrames,
     # feature names are `sender^ligand^receptor` (no target), factors named "Factor N"

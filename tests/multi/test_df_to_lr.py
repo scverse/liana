@@ -62,3 +62,27 @@ def test_dea_to_lr_params(toy_adata: AnnData, dea_df: DataFrame) -> None:
         return_all_lrs=True,
     )
     assert lr_res.shape == (3321, 23)
+
+
+def test_dea_to_lr_shared_stat_suffix(toy_adata: AnnData, dea_df: DataFrame) -> None:
+    """`stat_keys` sharing a suffix must not be averaged into each other's `interaction_` column.
+
+    A suffix match made `"val"` pick up `ligand_pval`/`receptor_pval` and the `interaction_pval`
+    written one iteration earlier, so `interaction_val` was neither of the two `*_val` columns.
+    """
+    dea_df = dea_df.rename(columns={"stat": "val"})
+
+    lr_res = df_to_lr(
+        toy_adata,
+        dea_df=dea_df,
+        expr_prop=0.1,
+        min_cells=10,
+        groupby=groupby,
+        stat_keys=["pval", "val"],
+        use_raw=False,
+        verbose=False,
+    )
+
+    expected = lr_res[["ligand_val", "receptor_val"]].mean(axis=1)
+    assert lr_res["interaction_val"].equals(expected)
+    assert lr_res["interaction_pval"].equals(lr_res[["ligand_pval", "receptor_pval"]].mean(axis=1))

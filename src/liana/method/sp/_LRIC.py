@@ -45,7 +45,7 @@ _MIN_CELLS_FRAC = 0.01
 # ── helpers ───────────────────────────────────────────────────────────
 
 
-def _default_min_cells(adata: AnnData, min_cells: int | None, verbose: bool) -> int:
+def _default_min_cells(adata: AnnData, min_cells: int | None, verbose: bool | None) -> int:
     """Default ``min_cells`` to an abundance-relative threshold.
 
     ``None`` means "drop cell types making up no more than ``_MIN_CELLS_FRAC``
@@ -65,7 +65,13 @@ def _default_min_cells(adata: AnnData, min_cells: int | None, verbose: bool) -> 
 
 
 def _linear_transform(expr: np.ndarray) -> np.ndarray:
-    """Mean-normalise to a mean of 1"""
+    """Mean-normalise to a mean of 1.
+
+    A column whose mean is 0 is passed through unscaled rather than divided:
+    that is an all-zero gene (negative input is rejected upstream by
+    ``prep_check_adata(block_negatives=True)``), so the column is already 0 and
+    dividing would only turn it into ``NaN``.
+    """
     mean = expr.mean(axis=0, keepdims=True)
     smean = np.where(mean > 0, mean, 1.0)
     return expr / smean
@@ -369,35 +375,74 @@ def _counting_sort_edges(
     return I_sorted, J_sorted, bounds
 
 
+def _selected_levels(levels: list[str], selected_types: Sequence[str] | ArrayLike | None) -> list[str]:
+    """The retained cell types the user asked to see, in ``levels`` order.
+
+    The null is always estimated over every retained type (see
+    :func:`_select_pairs`), so the selection narrows only what is emitted --
+    including the categories of the ``source``/``target`` columns.
+    """
+    if selected_types is None:
+        return levels
+    wanted = {str(ct) for ct in np.asarray(selected_types).ravel()}
+    return [ct for ct in levels if ct in wanted]
+
+
 def _select_pairs(
     pairs: list[tuple[int, int]],
     levels: list[str],
+    selected_types: Sequence[str] | ArrayLike | None,
     groupby_pairs: pd.DataFrame | None,
     symmetric: bool,
+    verbose: bool | None,
+    input_types: set[str] | None = None,
 ) -> list[tuple[int, int]]:
-    """Restrict cell-type index ``pairs`` to the combinations listed in ``groupby_pairs``.
+    """Restrict the *emitted* cell-type index ``pairs`` to what the caller asked for.
 
-    ``symmetric`` matches a request in either orientation -- ``cross_pcf``'s
-    ``g(r)`` is orientation-free, whereas ``lric``'s directed curves are not.
+    ``selected_types`` (``cell_types`` folded together with the types named by
+    ``groupby_pairs``) keeps only pairs whose both endpoints were selected;
+    ``groupby_pairs`` then keeps only the listed combinations. This is a filter
+    on the output alone -- ``levels``, ``counts`` and the point pattern behind
+    ``T(r)`` still cover every retained cell type, so the random-labelling null
+    is unchanged by the selection.
+
+    ``symmetric`` matches a ``groupby_pairs`` request in either orientation --
+    ``cross_pcf``'s ``g(r)`` is orientation-free, whereas ``lric``'s directed
+    curves are not.
+
+    ``input_types`` are the cell types of the *unfiltered* input: a requested
+    type in it but not in ``levels`` was dropped by ``min_cells`` rather than
+    misspelled, and the two need different fixes.
     """
-    if groupby_pairs is None:
+    if selected_types is None and groupby_pairs is None:
         return pairs
-    requested = set(zip(groupby_pairs[P.source], groupby_pairs[P.target], strict=True))
-    absent = {ct for pair in requested for ct in pair}.difference(levels)
-    if absent:
+    if selected_types is not None:
+        wanted = {str(ct) for ct in np.asarray(selected_types).ravel()}
+        if absent := wanted.difference(levels):
+            dropped = absent.intersection(input_types or ())
+            detail = [f"not in the data: {sorted(absent - dropped)}"] if absent - dropped else []
+            if dropped:
+                detail.append(f"dropped by `min_cells`: {sorted(dropped)}")
+            _logg(
+                f"`cell_types`/`groupby_pairs` name cell types that are {'; '.join(detail)}.",
+                level="warn",
+                verbose=verbose,
+            )
+        pairs = [(s, r) for s, r in pairs if levels[s] in wanted and levels[r] in wanted]
+    if groupby_pairs is not None:
+        requested = set(zip(groupby_pairs[P.source], groupby_pairs[P.target], strict=True))
+        pairs = [
+            (s, r)
+            for s, r in pairs
+            if (levels[s], levels[r]) in requested or (symmetric and (levels[r], levels[s]) in requested)
+        ]
+    if not pairs:
         _logg(
-            f"`groupby_pairs` names cell types that are not in the data: {sorted(absent)}.",
+            "`cell_types`/`groupby_pairs` matched no cell-type pair; the result is empty.",
             level="warn",
-            verbose=True,
+            verbose=verbose,
         )
-    kept = [
-        (s, r)
-        for s, r in pairs
-        if (levels[s], levels[r]) in requested or (symmetric and (levels[r], levels[s]) in requested)
-    ]
-    if not kept:
-        _logg("`groupby_pairs` matched no cell-type pair; the result is empty.", level="warn", verbose=True)
-    return kept
+    return pairs
 
 
 @nb.njit(parallel=True, cache=True)
@@ -505,7 +550,7 @@ class CrossPCF:
         groupby_pairs: pd.DataFrame | None = V.groupby_pairs,
         key_added: str = "cross_pcf",
         inplace: bool = V.inplace,
-        verbose: bool = V.verbose,
+        verbose: bool | None = V.verbose,
     ) -> pd.DataFrame | None:
         """Cross pair-correlation function (cross-PCF) between cell types.
 
@@ -520,6 +565,9 @@ class CrossPCF:
         %(groupby)s
         %(spatial_key)s
         %(cell_types)s
+            Restricts which pairs are *emitted*, not which cells are used:
+            ``g(r)`` is normalised against the point pattern of the whole
+            slide, so a selection leaves every curve it does emit unchanged.
         %(min_cells)s
             Default ``None`` derives the threshold from slide composition
             instead of using a fixed count: cell types making up no more than
@@ -531,8 +579,7 @@ class CrossPCF:
         %(groupby_pairs)s
             Restricts the cell-type combinations that are emitted to those
             listed; matched regardless of orientation, as ``g(r)`` is symmetric.
-            Cell types referenced by ``groupby_pairs`` are also folded into
-            ``cell_types``.
+            Like ``cell_types``, it filters the output only.
         %(key_added)s
         %(inplace)s
         %(verbose)s
@@ -556,6 +603,13 @@ class CrossPCF:
         pairs between distinct cells counted in the contact band. Pairwise
         ``LRIC``'s ``g_pcf`` therefore equals ``cross_pcf`` exactly.
 
+        The null conditions on the observed point pattern, so it is estimated
+        over every retained cell type; ``cell_types`` and ``groupby_pairs``
+        select which curves come back, and never move the ones that do.
+        ``min_cells`` is the one residual exception: dropping a lowly abundant
+        type removes its cells from the support as well, so its neighbours'
+        ``g(r)`` shifts slightly. Pass ``min_cells=0`` to keep the full slide.
+
         Examples
         --------
         >>> import liana as li
@@ -575,7 +629,10 @@ class CrossPCF:
             adata=adata,
             groupby=groupby,
             min_cells=_default_min_cells(adata, min_cells, verbose),
-            groupby_subset=selected_types,
+            # deliberately NOT `groupby_subset=selected_types`: the null conditions on the
+            # observed point pattern, so subsetting the cells would move `sup.N`/`sup.T` and
+            # destroy the very signal it was asked to report. The selection filters the
+            # emitted pairs instead (`_select_pairs`).
             use_raw=False,
             layer=None,
             obsm={spatial_key: adata.obsm[spatial_key]},
@@ -587,9 +644,17 @@ class CrossPCF:
         n_types = len(levels)
         # g(r) is symmetric in (sender, receiver) -- emit each unordered pair once
         pairs = [(s, r) for s in range(n_types) for r in range(s + 1, n_types)]
-        pairs = _select_pairs(pairs, levels, groupby_pairs, symmetric=True)
+        pairs = _select_pairs(
+            pairs,
+            levels,
+            selected_types,
+            groupby_pairs,
+            symmetric=True,
+            verbose=verbose,
+            input_types=set(get_obs(_adata_orig)[groupby].astype(str)),
+        )
         _logg(
-            f"Computing cross-PCF for {n_types} cell types ({len(pairs)} pairs).",
+            f"Computing cross-PCF over {n_types} retained cell types ({len(pairs)} pairs emitted).",
             verbose=verbose,
         )
 
@@ -609,6 +674,7 @@ class CrossPCF:
                 g[sup.T == 0] = np.nan
             G[:, k] = g
 
+        emitted = _selected_levels(levels, selected_types)
         res = _melt_curves(
             sup.radii,
             {
@@ -616,8 +682,9 @@ class CrossPCF:
                 P.target: [levels[t] for _, t in pairs],
                 "interaction": [f"{levels[s]}{V.lr_sep}{levels[t]}" for s, t in pairs],
             },
-            # keep every retained cell type as a category, incl. any that only appear as `target`
-            categories={P.source: levels, P.target: levels},
+            # every SELECTED cell type stays a category, incl. any that only appears as
+            # `target` -- the unselected ones are part of the null, not of the result
+            categories={P.source: emitted, P.target: emitted},
             g=G,
         )
         if inplace:
@@ -684,7 +751,7 @@ class LRIC:
         pair_chunk: int | None = None,
         key_added: str = "lric",
         inplace: bool = V.inplace,
-        verbose: bool = V.verbose,
+        verbose: bool | None = V.verbose,
     ) -> pd.DataFrame | None:
         """
 
@@ -723,16 +790,20 @@ class LRIC:
             In LRIC this specifically preserves juxtacrine (direct-contact)
             ligand-receptor signal in the first bin.
         %(cell_types)s
-            Only relevant when ``groupby`` is set.
+            Only relevant when ``groupby`` is set. Restricts which pairs are
+            *emitted*, not which cells are used: the null conditions on the
+            point pattern of the whole slide, so a selection leaves every
+            curve it does emit unchanged.
         %(min_cells)s
             Default ``None`` derives the threshold from slide composition
             instead of using a fixed count: cell types making up no more than
-            1% of all cells are dropped.
+            1% of all cells are dropped. Unlike ``cell_types``, this one does
+            remove cells, so it shifts the null slightly -- pass
+            ``min_cells=0`` to keep the full slide.
         %(groupby_pairs)s
             Only relevant when ``groupby`` is set. Restricts the directed
-            sender->receiver combinations actually computed to those listed;
-            cell types referenced by ``groupby_pairs`` are also folded into
-            ``cell_types``.
+            sender->receiver combinations that are emitted to those listed.
+            Like ``cell_types``, it filters the output only.
         %(nz_prop)s
             Only relevant when ``groupby`` is ``None`` (agnostic mode).
             Interactions below the threshold are set to ``NaN``.
@@ -749,7 +820,10 @@ class LRIC:
             Expression transform applied to ligand and receptor matrices,
             defaulting to mean-normalisation to 1 (``_linear_transform``).
         %(use_raw)s
+            Must resolve to non-negative expression; scaled or centred data is
+            rejected, as the weights are expression relative to a mean.
         %(layer)s
+            Same requirement as ``use_raw``: non-negative expression only.
         pair_chunk
             Deprecated since 2.1 and ignored. The weighted numerator is now
             accumulated without materialising per-chunk temporaries, so there is
@@ -757,6 +831,11 @@ class LRIC:
         %(key_added)s
         %(inplace)s
         %(verbose)s
+
+        Raises
+        ------
+        ValueError
+            If the resolved expression matrix carries negative values.
 
         Returns
         -------
@@ -805,19 +884,24 @@ class LRIC:
             verbose=verbose,
         )
 
-        if groupby is not None:
-            selected_types = _fold_groupby_pairs(groupby_pairs, cell_types)
+        selected_types = _fold_groupby_pairs(groupby_pairs, cell_types) if groupby is not None else None
 
         _adata_orig = adata
         adata = prep_check_adata(
             adata=adata,
             groupby=groupby,
             min_cells=(_default_min_cells(adata, min_cells, verbose) if groupby is not None else None),
-            groupby_subset=selected_types if groupby is not None else None,
+            # deliberately NOT `groupby_subset=selected_types`: `_expected_pairs` conditions on
+            # the observed point pattern via `sup.N`/`sup.T`, so subsetting the cells would move
+            # the null itself. `_select_pairs` filters the emitted curves instead.
             use_raw=use_raw,
             layer=layer,
             obsm={spatial_key: adata.obsm[spatial_key]},
             complex_sep=complex_sep,
+            # the weights are expression relative to a per-gene mean, so negative input is
+            # rejected; the log1p heuristic stays off, as any positive rescaling cancels
+            block_negatives=True,
+            check_lognorm=False,
             verbose=verbose,
         )
 
@@ -852,6 +936,9 @@ class LRIC:
                 resource=resource,
                 groupby=groupby,
                 sup=sup,
+                selected_types=selected_types,
+                # the levels `_pairwise` sees are post-`min_cells`; these are the input's
+                input_types=set(get_obs(_adata_orig)[groupby].astype(str)),
                 groupby_pairs=groupby_pairs,
                 expr_prop=expr_prop,
                 lr_sep=lr_sep,
@@ -872,7 +959,7 @@ class LRIC:
         nz_prop: float,
         lr_sep: str,
         transform_fn: Transform | None,
-        verbose: bool,
+        verbose: bool | None,
     ) -> pd.DataFrame:
         """Cell-type-agnostic LRIC across all cells (self-pairs excluded).
 
@@ -923,11 +1010,13 @@ class LRIC:
         resource: pd.DataFrame,
         groupby: str,
         sup: _Support,
+        selected_types: Sequence[str] | ArrayLike | None,
+        input_types: set[str],
         groupby_pairs: pd.DataFrame | None,
         expr_prop: float,
         lr_sep: str,
         transform_fn: Transform | None,
-        verbose: bool,
+        verbose: bool | None,
     ) -> pd.DataFrame:
         """Cell-type pairwise ("ct") LRIC under the conditional (within-type) null.
 
@@ -947,13 +1036,26 @@ class LRIC:
 
         Reduces exactly to ``CrossPCF`` whenever weights are
         position-independent.
+
+        ``selected_types``/``groupby_pairs`` narrow the emitted curves only:
+        ``levels``, ``counts`` and ``sup`` cover every retained cell type, so
+        the null stays conditioned on the whole point pattern.
         """
         obs_types, levels, codes, counts = _type_index(adata, groupby)
         n_types = len(levels)
         pairs = [(s, r) for s in range(n_types) for r in range(n_types) if s != r]
-        pairs = _select_pairs(pairs, levels, groupby_pairs, symmetric=False)
+        pairs = _select_pairs(
+            pairs,
+            levels,
+            selected_types,
+            groupby_pairs,
+            symmetric=False,
+            verbose=verbose,
+            input_types=input_types,
+        )
         _logg(
-            f"Running LRIC (conditional within-type null) for {n_types} cell types ({len(pairs)} directed pairs).",
+            f"Running LRIC (conditional within-type null) over {n_types} retained cell types "
+            f"({len(pairs)} directed pairs emitted).",
             verbose=verbose,
         )
 
@@ -1037,7 +1139,8 @@ class LRIC:
                 P.receptor_complex: np.tile(receptors, len(pairs)),
                 "interaction": np.tile(pair_names, len(pairs)),
             },
-            categories={P.source: levels, P.target: levels},
+            # only the SELECTED types are categories; the rest are null, not result
+            categories=dict.fromkeys((P.source, P.target), _selected_levels(levels, selected_types)),
             g=G,
             g_expr=E,
             g_pcf=PC,

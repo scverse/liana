@@ -102,3 +102,16 @@ def test_raises_on_missing_sample_key(adata: AnnData) -> None:
 def test_raises_on_missing_spatial_key(adata: AnnData) -> None:
     with pytest.raises(ValueError, match="not_a_key"):
         expand_coordinates(adata, sample_key="sample", spatial_key="not_a_key")
+
+
+def test_unused_category_is_ignored(adata: AnnData) -> None:
+    """A zero-observation level used to give an empty `sample_coords` and a zero-size reduction."""
+    obs = get_obs(adata)
+    obs["sample"] = obs["sample"].cat.add_categories(["sample_unused"])
+    assert "sample_unused" in get_obs(adata)["sample"].cat.categories
+    assert not (get_obs(adata)["sample"] == "sample_unused").any()
+
+    baseline = expand_coordinates(create_test_adata(n_per_sample=50, n_samples=3, seed=0), sample_key="sample")
+    expanded = expand_coordinates(adata, sample_key="sample")
+
+    np.testing.assert_allclose(get_coordinates(expanded, "spatial"), get_coordinates(baseline, "spatial"))

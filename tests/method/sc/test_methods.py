@@ -1,10 +1,13 @@
+from itertools import product
+
+import numpy as np
 import pandas
 import pytest
 from anndata import AnnData
 from mudata import MuData
 from numpy import isclose, max, min
 from numpy.testing import assert_almost_equal
-from pandas import DataFrame
+from pandas import Categorical, DataFrame
 
 from liana.method import cellchat, cellphonedb, connectome, geometric_mean, logfc, natmi, scseqcomm
 from liana.method import singlecellsignalr as sca
@@ -102,6 +105,15 @@ def test_natmi(toy_adata: AnnData, expected_shape: tuple[int, int]) -> None:
     )
 
 
+def test_natmi_single_pair_warns(toy_adata: AnnData) -> None:
+    """A single `groupby_pairs` pair leaves NATMI nothing to normalise `spec_weight` against."""
+    pairs = DataFrame({"source": ["CD34+"], "target": ["Dendritic"]})
+    with pytest.warns(UserWarning, match="`spec_weight` is 1 for every ligand"):
+        res = natmi(toy_adata, groupby="bulk_labels", use_raw=True, inplace=False, groupby_pairs=pairs)
+    assert isinstance(res, DataFrame)
+    assert (res["spec_weight"] == 1.0).all()
+
+
 def test_scseqcomm(toy_adata: AnnData, expected_shape: tuple[int, int]) -> None:
     scseqcomm(toy_adata, groupby="bulk_labels", expr_prop=0, return_all_lrs=True)
 
@@ -123,7 +135,11 @@ def test_scseqcomm(toy_adata: AnnData, expected_shape: tuple[int, int]) -> None:
         0.6819619345,
         decimal=5,
     )
-    assert_almost_equal(max(liana_res[(liana_res.receptor_complex == "CD74_CXCR4")]["inter_score"]), 1, decimal=6)
+    # scored by CXCR4, the limiting subunit of CD74_CXCR4 -- picking the highly expressed
+    # CD74 instead saturated `inter_score` at exactly 1.0
+    assert_almost_equal(
+        max(liana_res[(liana_res.receptor_complex == "CD74_CXCR4")]["inter_score"]), 0.999443104603042, decimal=6
+    )
 
 
 def test_sca(toy_adata: AnnData, expected_shape: tuple[int, int]) -> None:
@@ -203,8 +219,6 @@ def test_methods_by_sample_not_inplace(toy_adata: AnnData) -> None:
 
 
 def test_methods_on_mdata(toy_mdata: MuData) -> None:
-    from itertools import product
-
     toy_mdata.mod["adata_y"].var.index = "scaled:" + toy_mdata.mod["adata_y"].var.index
     interactions = list(product(toy_mdata.mod["adata_x"].var.index, toy_mdata.mod["adata_y"].var.index))
     interactions = interactions[0:10]
@@ -225,6 +239,35 @@ def test_methods_on_mdata(toy_mdata: MuData) -> None:
     )
 
     assert toy_mdata.uns["liana_res"].shape == (144, 12)
+
+
+def test_methods_by_sample_on_mdata(toy_mdata: MuData) -> None:
+    """`by_sample` slices its input, and slicing a MuData yields a MuData, not an AnnData."""
+    toy_mdata.mod["adata_y"].var.index = "scaled:" + toy_mdata.mod["adata_y"].var.index
+    interactions = list(product(toy_mdata.mod["adata_x"].var.index, toy_mdata.mod["adata_y"].var.index))[0:10]
+    # two balanced samples, so that every cell-type group survives `min_cells` in both
+    toy_mdata.obs["sample"] = Categorical(np.where(np.arange(toy_mdata.shape[0]) % 2 == 0, "a", "b"))
+
+    lr_by_sample = sca.by_sample(
+        toy_mdata,
+        sample_key="sample",
+        groupby="bulk_labels",
+        n_perms=None,
+        use_raw=False,
+        interactions=interactions,
+        inplace=False,
+        mdata_kwargs=MdataKwargs(x_mod="adata_x", y_mod="adata_y", x_transform=None, y_transform=None),
+    )
+
+    assert lr_by_sample is not None
+    assert sorted(lr_by_sample["sample"].unique()) == ["a", "b"]
+    assert {"ligand_complex", "receptor_complex", "lrscore"} <= set(lr_by_sample.columns)
+
+
+def test_expr_prop_empties_frame_raises(toy_adata: AnnData) -> None:
+    """An `expr_prop` that filters out every pair used to fail obscurely, or silently return 0 rows."""
+    with pytest.raises(ValueError, match=r"No ligand-receptor pair passed `expr_prop=1.0`"):
+        natmi(toy_adata, groupby="bulk_labels", expr_prop=1.0, n_perms=None)
 
 
 def test_wrong_resource(toy_adata: AnnData) -> None:

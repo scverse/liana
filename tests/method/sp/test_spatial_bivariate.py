@@ -79,7 +79,9 @@ def test_bivar_nondefault(mdata: MuData, interactions: list[tuple[str, str]]) ->
     assert "morans_pvals" in global_stats.columns
 
     assert lrdata.shape == (680, 100)
-    np.testing.assert_almost_equal(np.min(np.min(get_layer(lrdata, "pvals"))), 0.5, decimal=2)
+    # a "ones" connectivity leaves the local statistic at ~0, so the two-sided
+    # analytical p-value is ~1; it was ~0.5 while the p-values were one-sided
+    np.testing.assert_almost_equal(np.min(np.min(get_layer(lrdata, "pvals"))), 1.0, decimal=2)
 
 
 def test_masked_spearman(mdata: MuData, interactions: list[tuple[str, str]]) -> None:
@@ -96,13 +98,16 @@ def test_masked_spearman(mdata: MuData, interactions: list[tuple[str, str]]) -> 
             connectivity_key="ones",
         )
     )
-    np.testing.assert_almost_equal(get_x(lrdata).mean(), 0.18438724, decimal=5)
+    np.testing.assert_almost_equal(get_x(lrdata).mean(), 0.0027796142, decimal=5)
 
     assert lrdata.var.shape == (90, 8)
     global_res = lrdata.var
     assert {"mean", "std"}.issubset(global_res.columns)
-    np.testing.assert_almost_equal(global_res["mean"].mean(), 0.18438746, decimal=5)
-    np.testing.assert_almost_equal(global_res["std"].mean(), 8.498836e-07, decimal=5)
+    np.testing.assert_almost_equal(global_res["mean"].mean(), 0.0027795848, decimal=5)
+    # under the `ones` connectivity every neighbourhood is the whole slide, so every spot scores the
+    # same; a spread would mean the score depends on cell order again (`std` itself is float32 noise)
+    local_scores = to_dense(get_x(lrdata))
+    assert (local_scores == local_scores[0]).all()
 
 
 def test_vectorized_spearman(mdata: MuData, interactions: list[tuple[str, str]]) -> None:
@@ -150,7 +155,8 @@ def test_morans_analytical(toy_spatial: AnnData) -> None:
     assert (set(toy_spatial.obsm), set(toy_spatial.uns), set(toy_spatial.obsp)) == annotations
 
     np.testing.assert_almost_equal(np.mean(to_dense(get_x(lrdata[:, "MIF^CD74_CXCR4"]))), 0.12803833, decimal=6)
-    np.testing.assert_almost_equal(np.mean(get_layer(lrdata[:, "MIF^CD74_CXCR4"], "pvals")), 0.8764923, decimal=6)
+    # value shifted when the spurious constant was removed from the local Moran's R null variance
+    np.testing.assert_almost_equal(np.mean(get_layer(lrdata[:, "MIF^CD74_CXCR4"], "pvals")), 0.8672064, decimal=6)
 
     interaction = lrdata.var[lrdata.var.index == "S100A9^ITGB2"]
     np.testing.assert_almost_equal(interaction["morans"].to_numpy(), expected_gmorans)

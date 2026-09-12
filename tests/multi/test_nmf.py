@@ -37,9 +37,22 @@ def test_estimate_elbow(adata: AnnData) -> None:
 
 def test_run_nmf_df(adata: AnnData) -> None:
     df = adata.to_df()
-    W, H, errors, n_components = not_none(nmf(df=df, n_components=2, inplace=True, random_state=0, max_iter=20))
+    W, H, errors, n_components = not_none(nmf(df=df, n_components=2, random_state=0, max_iter=20))
 
     assert W.shape == (adata.n_obs, 2)
     assert H.shape == (adata.n_vars, 2)
     assert n_components == 2
     assert errors is None
+
+
+def test_run_nmf_no_elbow() -> None:
+    """A `k_range` with no knee in it used to run a full-rank, information-free NMF."""
+    rng = np.random.default_rng(0)
+    with pytest.raises(ValueError, match="No elbow"):
+        nmf(AnnData(rng.random((30, 8))), k_range=range(1, 4), random_state=0, max_iter=20)
+
+
+def test_run_nmf_df_rejects_inplace(adata: AnnData) -> None:
+    """`inplace=True` used to be silently discarded on the `df=` route."""
+    with pytest.raises(ValueError, match="needs an `AnnData` object"):
+        nmf(df=adata.to_df(), n_components=2, inplace=True, random_state=0, max_iter=20)

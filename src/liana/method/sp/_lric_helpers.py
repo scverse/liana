@@ -8,9 +8,13 @@ from anndata import AnnData
 from numpy.typing import NDArray
 
 from liana._core._common import _get_liana_res, _logg
+from liana._core._constants import DefaultValues as V
 from liana._core._docs import d
 
 _ID_COLS = ("source", "target", "ligand_complex", "receptor_complex", "interaction")
+
+_CURVE_COLS = ("radius", "g", "g_expr", "g_pcf")
+"""The per-radius value columns of a ``lric``/``cross_pcf`` result -- never part of a curve's key."""
 
 
 type CurveTransform = Callable[[NDArray[np.floating]], NDArray[np.floating]]
@@ -24,6 +28,28 @@ def _log2_floor(g: NDArray[np.floating]) -> NDArray[np.floating]:
     return np.asarray(np.log2(np.maximum(g, 0.05)))
 
 
+def _require_one_curve_set(res: pd.DataFrame, ids: list[str]) -> None:
+    """Reject a frame that stacks the results of several samples/conditions.
+
+    Filling the wide matrix is a scatter (``Y[gid, rid] = ...``) keyed on the id
+    columns and radius, so stacked results interleave: rows that share a key
+    overwrite one another, and rows on disjoint radius grids land in different
+    columns of the same row -- either way one curve is scored out of several.
+    ``_ID_COLS`` is a fixed tuple, so an annotation column such as ``sample`` or
+    ``condition`` is never part of the key; if any non-curve column varies, the
+    frame holds more than one result. Checking the columns rather than the keys
+    catches the disjoint-grid case, which collides on no key at all.
+    """
+    culprits = [c for c in res.columns if c not in {*ids, *_CURVE_COLS} and res[c].nunique(dropna=False) > 1]
+    if not culprits:
+        return
+    raise ValueError(
+        f"the column(s) {culprits} take more than one value, so this result stacks several "
+        f"results whose g(r) curves would be scored as one. `get_lric_auc` scores one curve per "
+        f"{ids} key: subset the frame (e.g. one sample at a time) or group it by {culprits} first."
+    )
+
+
 @d.dedent
 def get_lric_auc(
     adata: AnnData | None = None,
@@ -32,6 +58,7 @@ def get_lric_auc(
     max_dist: float | None = None,
     transform_fn: CurveTransform = _log2_floor,
     min_bins: int = 3,
+    verbose: bool | None = V.verbose,
 ) -> pd.DataFrame:
     """
     Summarise a ``lric`` / ``cross_pcf`` result into one score per interaction.
@@ -43,11 +70,10 @@ def get_lric_auc(
     Parameters
     ----------
     %(adata)s
-        Its ``.uns[uns_key]`` holds the result. Mutually exclusive with
-        ``liana_res``.
+        Its ``.uns[uns_key]`` holds the result, read when ``liana_res`` is ``None``.
     %(uns_key)s
     %(liana_res)s
-        A ``lric`` / ``cross_pcf`` result, used when ``adata`` is ``None``.
+        A ``lric`` / ``cross_pcf`` result; takes precedence over ``adata.uns``.
     max_dist
         Integrate only over radii ``r < max_dist``; ``None`` uses all radii.
     transform_fn
@@ -59,6 +85,7 @@ def get_lric_auc(
     min_bins
         Drop interactions with fewer than this many finite bins in the window
         (a support gate for proportion-masked / degenerate interactions).
+    %(verbose)s
 
     Returns
     -------
@@ -69,6 +96,14 @@ def get_lric_auc(
     interaction deviates most from the null -- sorted most-enriched first.
     The column names match :func:`liana.pl.dotplot`'s expectations. Empty if
     nothing clears ``min_bins``.
+
+    Raises
+    ------
+    ValueError
+        If any column other than the id and ``g(r)`` columns takes more than one
+        value -- e.g. a concatenation of several results, separated by a
+        ``sample``/``condition`` column. Score one result at a time, or group by
+        that column and score each group.
 
     Examples
     --------
@@ -84,6 +119,8 @@ def get_lric_auc(
     ids = [c for c in _ID_COLS if c in res.columns]
     if not ids:
         raise ValueError(f"None of {_ID_COLS} found in the result's columns.")
+
+    _require_one_curve_set(res, ids)
 
     # (n_groups, n_radii) wide matrix -- the radius grid is shared by every group
     radii = np.unique(res["radius"].to_numpy(dtype=float))
@@ -121,7 +158,7 @@ def get_lric_auc(
                 f"every interaction has <{min_bins} finite g(r) bins in-window "
                 "(nz_prop/expr_prop masking / sparse geometry) — lower min_bins or the threshold"
             )
-        _logg(msg, level="warn", verbose=True)
+        _logg(msg, level="warn", verbose=verbose)
     out = keys[ok].to_frame(index=False)
     out["score"] = area[ok] / span[ok]
     out["peak_radius"] = radii[np.where(keep, np.abs(Y), -np.inf).argmax(axis=1)][ok]
@@ -148,14 +185,18 @@ def get_lric_divergence(
     spatial profiles, larger means more different -- and reports where along
     radius the separation peaks.
 
+    Unlike :func:`get_lric_auc`, which scores one result at a time and rejects a
+    frame that stacks several, the divergence is meant for a concatenation of
+    results -- pin the column that separates them (e.g. ``condition``) in both
+    selections.
+
     Parameters
     ----------
     %(adata)s
-        Its ``.uns[uns_key]`` holds the result. Mutually exclusive with
-        ``liana_res``.
+        Its ``.uns[uns_key]`` holds the result, read when ``liana_res`` is ``None``.
     %(uns_key)s
     %(liana_res)s
-        A ``lric`` / ``cross_pcf`` result, used when ``adata`` is ``None``.
+        A ``lric`` / ``cross_pcf`` result; takes precedence over ``adata.uns``.
         May be a concatenation of several results with extra annotation columns
         (e.g. ``condition``) -- pin those in the selections to compare the same
         interaction across conditions.

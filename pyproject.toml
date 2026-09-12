@@ -84,8 +84,8 @@ optional-dependencies.tutorials-gpu = [
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://liana.readthedocs.io/"
-urls.Homepage = "https://github.com/scverse/liana-py"
-urls.Source = "https://github.com/scverse/liana-py"
+urls.Homepage = "https://github.com/scverse/liana"
+urls.Source = "https://github.com/scverse/liana"
 scripts.liana-install-skills = "liana._skills.install:main"
 
 [dependency-groups]
@@ -134,6 +134,20 @@ envs.docs.scripts.build = "sphinx-build -M html docs docs/_build -W {args}"
 envs.docs.scripts.clean = "git clean -fdX -- {args:docs}"
 envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.dependency-groups = [ "doc" ]
+# Runs the `>>>` examples in `src/` docstrings.
+# Separate from `hatch-test` because it imports every module under `src/` and re-executes each example -- work the unit suite should not pay for.
+envs.doctest.features = [ "extras" ]
+envs.doctest.scripts.run = "pytest --doctest-modules src/liana {args}"
+envs.doctest.dependency-groups = [ "test" ]
+envs.hatch-check-code.dependencies = [ "prek" ]
+envs.hatch-check-code.scripts.lint-check = "echo 'try `hatch check code --fix`'; false"
+envs.hatch-check-code.scripts.lint-fix = "prek run -a --no-group=format --no-group=typecheck"
+envs.hatch-check-fmt.dependencies = [ "prek" ]
+envs.hatch-check-fmt.scripts.format-check = "echo 'try `hatch check fmt --fix`'; false"
+envs.hatch-check-fmt.scripts.format-fix = "prek run -a --group=format --no-group=typecheck"
+envs.hatch-check-types.features = [ "extras" ]
+envs.hatch-check-types.scripts.check = [ "mypy" ]
+envs.hatch-check-types.dependency-groups = [ "typecheck", "test" ]
 envs.hatch-test.features = [ "extras" ]
 envs.hatch-test.matrix = [
   # Test every supported Python version with normal deps
@@ -146,20 +160,6 @@ envs.hatch-test.overrides.matrix.deps.env-vars = [
   { value = "allow", key = "UV_PRERELEASE", if = [ "pre" ] },
 ]
 envs.hatch-test.dependency-groups = [ "dev", "test" ]
-envs.hatch-check-fmt.dependencies = [ "prek" ]
-envs.hatch-check-fmt.scripts.format-check = "echo 'try `hatch check fmt --fix`'; false"
-envs.hatch-check-fmt.scripts.format-fix = "prek run -a --group=format --no-group=typecheck"
-envs.hatch-check-code.dependencies = [ "prek" ]
-envs.hatch-check-code.scripts.lint-check = "echo 'try `hatch check code --fix`'; false"
-envs.hatch-check-code.scripts.lint-fix = "prek run -a --no-group=format --no-group=typecheck"
-envs.hatch-check-types.features = [ "extras" ]
-envs.hatch-check-types.scripts.check = [ "mypy" ]
-envs.hatch-check-types.dependency-groups = [ "typecheck", "test" ]
-envs.doctest.features = [ "extras" ]
-envs.doctest.scripts.run = "pytest --doctest-modules src/liana {args}"
-# Runs the `>>>` examples in `src/` docstrings.
-# Separate from `hatch-test` because it imports every module under `src/` and re-executes each example -- work the unit suite should not pay for.
-envs.doctest.dependency-groups = [ "test" ]
 
 [tool.uv]
 # inflow_mofaflex.ipynb needs the unreleased 0.2.0 API (terms/priors); PyPI 0.1.2 is incompatible.
@@ -174,8 +174,8 @@ index = [ { name = "pytorch-cpu", url = "https://download.pytorch.org/whl/cpu", 
 line-length = 120
 src = [ "src" ]
 extend-include = [ "*.ipynb" ]
-format.exclude = [ "src/liana/_skills/data/**/*.md" ]  # keep the skill's aligned inline comments
 format.docstring-code-format = true
+format.exclude = [ "src/liana/_skills/data/**/*.md" ]  # keep the skill's aligned inline comments
 lint.select = [
   "B",      # flake8-bugbear
   "BLE",    # flake8-blind-except
@@ -207,7 +207,9 @@ lint.ignore = [
 lint.per-file-ignores."*/__init__.py" = [ "F401" ]
 lint.per-file-ignores."docs/*" = [ "I" ]
 lint.per-file-ignores."tests/*" = [ "D" ]
-lint.flake8-tidy-imports.banned-api."matplotlib.pyplot.show".msg = "return the figure instead; showing is the caller's decision"
+lint.flake8-tidy-imports.banned-api."matplotlib.pyplot.show".msg = """\
+  return the figure instead; showing is the caller's decision\
+  """
 lint.pydocstyle.convention = "numpy"
 
 [tool.mypy]
