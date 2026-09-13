@@ -183,6 +183,7 @@ nitpick_ignore = [
     ("py:class", "corneto.Graph"),
     # Base classes for *defining* methods, deliberately not in the public API
     ("py:class", "liana.method.sc._Method.Method"),
+    ("py:class", "liana.method.sc._Method.MethodMeta"),
     ("py:attr", "n_obs"),
     ("py:attr", "n_vars"),
     ("py:attr", "n_var"),
