@@ -364,8 +364,7 @@ filter_fn
     be plotted. In `dotplot` and `tileplot` it selects *interactions* rather than rows: an
     interaction (`ligand_complex` -> `receptor_complex`) is kept whenever the predicate holds for
     any of its source-target pairs, and is then plotted for all of them, so rows that fail the
-    predicate are drawn alongside those that pass. `circle` with `pivot_mode='mean'` widens the
-    same way, while `circle` with `pivot_mode='counts'` and the misty plots filter row-wise.
+    predicate are drawn alongside those that pass. `circle` and the misty plots filter row-wise.
 """
 
 _aggregate_fn = """\

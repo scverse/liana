@@ -3,17 +3,15 @@ import pytest
 from anndata import AnnData
 from matplotlib.axes import Axes
 from pandas import DataFrame, Series
-from pandas.testing import assert_frame_equal
 from tests._helpers import invalid
 
 from liana.plotting import circle
 from liana.plotting._circle_plot import (
-    _filter_by_labels,
     _get_adata_colors,
     _pivot_liana_res,
     _scale_list,
 )
-from liana.plotting._common import _filter_by
+from liana.plotting._common import _filter_by, _get_top_n
 
 
 @pytest.fixture
@@ -28,7 +26,7 @@ def adata(pbmc68k: AnnData, liana_res: DataFrame) -> AnnData:
 
 def test_circle_plot(adata: AnnData, liana_res: DataFrame) -> None:
     # circle_plot returns bare Axes, so assert on the adjacency it is built from:
-    # 'mean' averages the score per source-target pair ...
+    # 'mean' averages the score per source-target pair over the rows that pass `filter_fn` ...
     circle(adata, groupby="random", liana_res=liana_res, pivot_mode="mean", score_key="specificity_rank")
     means = _pivot_liana_res(liana_res, score_key="specificity_rank", mode="mean")
     expected = liana_res.groupby(["source", "target"])["specificity_rank"].mean()
@@ -140,12 +138,10 @@ def test_circle_labels_filter_rows(adata: AnnData, liana_res: DataFrame) -> None
     assert (nodes, edges) == (len(sources_of | {target}), len(sources_of))
 
 
-def test_circle_labels_do_not_change_weights(adata: AnnData, liana_res: DataFrame) -> None:
-    """The labels narrow the plot *after* `filter_fn`, so they leave the edge weights alone."""
+def test_circle_filter_fn_is_row_wise_in_mean_mode(adata: AnnData, liana_res: DataFrame) -> None:
+    """A 'mean' edge averages the pairs that pass `filter_fn`, not every pair of a passing interaction."""
     res = liana_res.assign(interaction=liana_res["ligand_complex"] + " -> " + liana_res["receptor_complex"])
-    # an interaction that passes the filter only through a source the labels exclude: `'mean'`
-    # keeps all of its pairs, so selecting over every label first is what keeps the pairs the
-    # labels do ask for - and their means - in the plot
+    # an interaction with several sources, passing the filter through one of them only
     sources = res.groupby("interaction")["source"].unique()
     interaction, labels = next((name, group) for name, group in sources.items() if len(group) > 1)
     source, other = labels[:2]
@@ -153,14 +149,11 @@ def test_circle_labels_do_not_change_weights(adata: AnnData, liana_res: DataFram
     def filter_fn(row: Series) -> bool:
         return bool(row["interaction"] == interaction and row["source"] == other)
 
-    selected = _filter_by(res, filter_fn)
-    unrestricted = _pivot_liana_res(selected, score_key="specificity_rank", mode="mean")
-    narrowed = _pivot_liana_res(
-        _filter_by_labels(selected, source_labels=[source]), score_key="specificity_rank", mode="mean"
-    )
-    assert_frame_equal(narrowed, unrestricted.loc[narrowed.index, narrowed.columns])
-
-    # ... and the plot, narrowed the same way, draws exactly those edges
+    # interaction-wise selection (what `dotplot` does) would keep `source`'s pairs too ...
+    assert _filter_by(res, filter_fn)["source"].eq(source).any()
+    # ... while the circle plot keeps only the rows that pass, so `source` carries no edge
+    passing = res[res.apply(filter_fn, axis=1)]
+    expected = _pivot_liana_res(passing, score_key="specificity_rank", mode="mean")
     ax = circle(
         adata,
         groupby="random",
@@ -168,9 +161,45 @@ def test_circle_labels_do_not_change_weights(adata: AnnData, liana_res: DataFram
         pivot_mode="mean",
         score_key="specificity_rank",
         filter_fn=filter_fn,
-        source_labels=[source],
     )
-    assert _counts(ax)[1] == int((narrowed.to_numpy() != 0).sum())
+    assert _counts(ax)[1] == int((expected.to_numpy() != 0).sum())
+    assert source not in expected.index
+
+    # and asking for `source` on top of that filter leaves nothing to draw
+    with pytest.raises(ValueError, match="No interactions remain to plot"):
+        circle(
+            adata,
+            groupby="random",
+            liana_res=liana_res,
+            pivot_mode="mean",
+            score_key="specificity_rank",
+            filter_fn=filter_fn,
+            source_labels=[source],
+        )
+
+
+def test_circle_top_n_ranks_within_labels(adata: AnnData, liana_res: DataFrame) -> None:
+    """`source_labels` narrow the frame before `top_n`, so the top interactions are the source's own."""
+    res = liana_res.assign(interaction=liana_res["ligand_complex"] + " -> " + liana_res["receptor_complex"])
+    source = res["source"].iloc[0]
+    own = res[res["source"].eq(source)]
+    expected = _pivot_liana_res(
+        _get_top_n(own, top_n=1, orderby="specificity_rank", orderby_ascending=True, orderby_absolute=False),
+        mode="counts",
+    )
+    ax = circle(
+        adata,
+        groupby="random",
+        liana_res=liana_res,
+        source_labels=[source],
+        top_n=1,
+        orderby="specificity_rank",
+        orderby_ascending=True,
+    )
+    assert _counts(ax)[1] == int((expected.to_numpy() != 0).sum())
+    # ... whereas the global top interaction need not involve `source` at all
+    global_top = _get_top_n(res, top_n=1, orderby="specificity_rank", orderby_ascending=True, orderby_absolute=False)
+    assert not global_top["source"].eq(source).any()
 
 
 def test_circle_mask_mode(adata: AnnData, liana_res: DataFrame) -> None:
@@ -203,3 +232,22 @@ def test_circle_uses_passed_liana_res(adata: AnnData, liana_res: DataFrame) -> N
     assert _counts(circle(adata, groupby="random", liana_res=subset)) != _counts(
         circle(adata, groupby="random", liana_res=liana_res)
     )
+
+
+def test_circle_keeps_zero_weight_edges(adata: AnnData, liana_res: DataFrame) -> None:
+    """A pair whose rows average to exactly 0 is still an edge; only pairs without rows are absent."""
+    res = liana_res.copy()
+    source, target = "A", "B"
+    pair = res["source"].eq(source) & res["target"].eq(target)
+    assert pair.any()
+    # `-log10(1) == 0`: an inverted rank of 1 used to be indistinguishable from "no interactions"
+    res.loc[pair, "magnitude_rank"] = 1.0
+    res.loc[~pair, "magnitude_rank"] = 0.5
+
+    with_zero = circle(
+        adata, groupby="random", liana_res=res, pivot_mode="mean", score_key="magnitude_rank", inverse_score=True
+    )
+    without = circle(
+        adata, groupby="random", liana_res=res[~pair], pivot_mode="mean", score_key="magnitude_rank", inverse_score=True
+    )
+    assert _counts(with_zero)[1] == _counts(without)[1] + 1
