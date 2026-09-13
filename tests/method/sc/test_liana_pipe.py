@@ -1,3 +1,4 @@
+import math
 import pathlib
 from itertools import product
 
@@ -214,7 +215,7 @@ def test_expm1_fun(pbmc68k: AnnData) -> None:
 
 
 @pytest.mark.parametrize(
-    ("dtype", "base", "limit"), [("float32", np.e, 88.72), ("float64", np.e, 709.78), ("float32", 2.0, 128.0)]
+    ("dtype", "base", "limit"), [("float32", math.e, 88.72), ("float64", math.e, 709.78), ("float32", 2.0, 128.0)]
 )
 def test_expm1_base_rejects_untransformed_counts(dtype: str, base: float, limit: float) -> None:
     # `base ** x` is monotonic, so the max decides: just under the limit is finite, just over is `inf`
@@ -227,7 +228,7 @@ def test_expm1_base_rejects_untransformed_counts(dtype: str, base: float, limit:
 
 def test_expm1_base_edge_cases() -> None:
     # empty data (every feature stripped upstream) has no maximum to check
-    assert _expm1_base(np.array([], dtype="float32"), np.e).size == 0
+    assert _expm1_base(np.array([], dtype="float32"), math.e).size == 0
     # `base <= 1` is bounded by 1 for non-negative input, so the guard must not fire on it
     np.testing.assert_allclose(_expm1_base(np.array([1e4], dtype="float32"), 1.0), [0.0])
 
