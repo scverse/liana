@@ -20,8 +20,8 @@ def nmf(
     k_range: range = range(1, 11),
     use_raw: bool = False,
     layer: str | None = None,
-    inplace: bool = True,
-    verbose: bool = False,
+    inplace: bool | None = None,
+    verbose: bool | None = False,
     **kwargs: object,
 ) -> tuple[np.ndarray, np.ndarray, pd.DataFrame | None, int | None] | None:
     """
@@ -38,7 +38,10 @@ def nmf(
         Range of components to test. Default: range(1, 10).
     %(use_raw)s
     %(layer)s
-    %(inplace)s
+    inplace
+        Whether to store the factors on ``adata``, or else to return them. Defaults to ``None``, which
+        stores them when ``adata`` is given and returns them on the ``df`` route. Passing ``inplace=True``
+        together with ``df`` raises, since there is no object to store them on.
     **kwargs
         Keyword arguments to pass to ``sklearn.decomposition.NMF``.
 
@@ -49,12 +52,14 @@ def nmf(
 
     If inplace is False, it will return ``W`` and ``H``, and if n_components is None, it will also return ``errors`` and ``n_components``.
     If n_components is None and inplace, ``errors`` and ``n_components`` will be assigned to ``adata.uns``.
-    If ``df`` is provided, inplace is always False.
+    If ``df`` is provided, only ``inplace=False`` is accepted -- there is nothing to write to.
 
     Raises
     ------
         ValueError
-            If `adata` is provided but it's not a valid instance of an `AnnData` object or neither an `AnnData` or `DataFrame` intance is provided as input
+            If `adata` is provided but it's not a valid instance of an `AnnData` object,
+            if neither an `AnnData` or `DataFrame` intance is provided as input, if `inplace=True` is
+            combined with `df`, or if `n_components` is None and no elbow is found within `k_range`
 
     Examples
     --------
@@ -82,8 +87,19 @@ def nmf(
     else:
         raise ValueError("Provide either an AnnData object or a DataFrame.")
 
+    if inplace and adata is None:
+        raise ValueError(
+            "`inplace=True` needs an `AnnData` object to write to; the `df` route can only return the "
+            "factors. Pass `inplace=False` (or leave it unset) when providing `df`."
+        )
+    inplace = adata is not None if inplace is None else inplace
+
     if n_components is None:
         errors, n_components = estimate_elbow(X, k_range=k_range, verbose=verbose, **kwargs)
+        if n_components is None:
+            raise ValueError(
+                f"No elbow was found within `k_range={k_range}`; widen it or pass `n_components` explicitly."
+            )
     else:
         errors, n_components = None, n_components
 
@@ -104,7 +120,7 @@ def nmf(
 def estimate_elbow(
     X: MatrixLike,
     k_range: range,
-    verbose: bool = False,
+    verbose: bool | None = False,
     **kwargs: object,
 ) -> tuple[pd.DataFrame, int | None]:
     """

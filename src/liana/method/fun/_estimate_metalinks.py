@@ -21,7 +21,7 @@ def estimate_metalinks(
     y_name: str = "receptor",
     use_raw: bool = V.use_raw,
     layer: str | None = V.layer,
-    verbose: bool = V.verbose,
+    verbose: bool | None = V.verbose,
     **kwargs: object,
 ) -> MuData:
     """
@@ -71,7 +71,8 @@ def estimate_metalinks(
     `t_net` to additionally require a transporter for metabolites that cannot cross
     the membrane on their own. The result is the input to
     ``liana.mt.bivariate`` or to any single-cell method, with
-    `x_mod='metabolite'` and `y_mod='receptor'`.
+    `x_mod='metabolite'` and `y_mod='receptor'`. The metabolite scores are signed
+    activities, so any liana single-cell method would need the scores to be pre-transformed.
     """
     dc = _check_if_installed(package_name="decoupler")
     ad = prep_check_adata(

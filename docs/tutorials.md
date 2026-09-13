@@ -2,6 +2,8 @@
 
 Each tutorial is a notebook that runs top to bottom on a public dataset from {mod}`liana.ds`.
 
+Using Claude Code? Install the [LIANA+ skill](installation.md#claude-code-skill) and it walks you through the same workflows on your own data.
+
 ## Where to start
 
 The tree below goes from the kind of data you have to the methods that apply to it.

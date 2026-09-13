@@ -7,9 +7,10 @@ from liana.plotting import elbow
 
 
 def test_elbow(toy_adata: AnnData) -> None:
-    nmf(toy_adata, n_components=None, k_range=range(1, 5), random_state=0, max_iter=20)
+    # `range(1, 5)` finds no elbow on this fixture and `nmf` now raises for that; `range(1, 6)` does
+    nmf(toy_adata, n_components=None, k_range=range(1, 6), random_state=0, max_iter=20)
     plot_data = _frame(elbow(toy_adata))
-    assert plot_data["k"].to_list() == [1, 2, 3, 4]
+    assert plot_data["k"].to_list() == [1, 2, 3, 4, 5]
     assert plot_data["error"].is_monotonic_decreasing
 
 

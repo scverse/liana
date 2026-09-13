@@ -11,9 +11,10 @@ Unpublished extension (Alsayah et al., in preparation): cite LIANA+ meanwhile.
 li.pp.spatial_neighbors(adata, bandwidth=30)          # coordinate units, see below; cells keep set_diag=False
 lrdata = li.mt.inflow(adata, groupby="cell_type", resource_name="mouseconsensus")
 li.mt.compute_global_specificity(lrdata, groupby="cell_type")   # groupby = receiver label
-lrdata.uns["global_interactions"]                     # source, target, ligand_complex, receptor_complex, lr_mean, pval
+lrdata.uns["global_interactions"]                     # source, ligand_complex, receptor_complex, target, lr_mean, pval
 li.pl.dotplot(lrdata, uns_key="global_interactions", colour="lr_mean", size="pval", inverse_size=True)
-li.pl.feature_by_group(lrdata, groupby="cell_type", feature="Astro^Apoe^Lrp1")   # one source^ligand^receptor
+li.pl.feature_by_group(lrdata, groupby="cell_type", labels=["Astro", "Micro"],   # `labels` is required
+                       feature="Astro^Apoe^Lrp1")                                # one source^ligand^receptor
 ```
 
 - Bandwidth is in coordinate units and should be one to two cell diameters (the tutorial uses 27 µm

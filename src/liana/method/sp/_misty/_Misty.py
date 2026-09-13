@@ -180,7 +180,7 @@ class MistyData(MuData):
         alphas: float | NDArray[np.floating] | list[float] = np.array([0.1, 1, 10]),
         seed: int = V.seed,
         inplace: bool = V.inplace,
-        verbose: bool = V.verbose,
+        verbose: bool | None = V.verbose,
         **kwargs: Any,
     ) -> None | tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -313,6 +313,7 @@ class MistyData(MuData):
                     k_cv,
                     alphas,
                     seed,
+                    verbose,
                 )
                 targets_list.append(target_metrics)
 
@@ -401,6 +402,7 @@ def _multi_model(
     k_cv: int,
     alphas: float | NDArray[np.floating] | list[float],
     seed: int,
+    verbose: bool | None,
 ) -> pd.DataFrame:
     n_views = len(view_str)
 
@@ -410,7 +412,7 @@ def _multi_model(
         else:
             warning_message = f"Variance of '{target}' is 0.0, metrics set to NaN"
 
-        _logg(warning_message, verbose=True, level="warn")
+        _logg(warning_message, verbose=verbose, level="warn")
         return _format_targets(target, intra_group, view_str, np.nan, np.nan, np.repeat(np.nan, n_views))
 
     kf = KFold(n_splits=k_cv, shuffle=True, random_state=seed)

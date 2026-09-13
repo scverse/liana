@@ -12,8 +12,9 @@ from matplotlib.axes import Axes
 
 from liana._core._constants import Keys as K
 from liana._core._docs import d
+from liana._core._pipe_utils._pre import _require_groupby
 from liana._core._types import RowFilter, get_obs
-from liana.plotting._common import _filter_by, _get_top_n, _invert_scores, _prep_liana_res
+from liana.plotting._common import _get_top_n, _invert_scores, _prep_liana_res
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
@@ -25,16 +26,16 @@ def _pivot_liana_res(
     target_key: str = "target",
     score_key: str | None = "lr_means",
     mode: Literal["counts", "mean"] = "counts",
+    fill_value: float | None = 0,
 ) -> pd.DataFrame:
+    """Source-by-target table of edge weights; pairs without rows take ``fill_value`` (``None`` leaves them ``NaN``)."""
     if mode == "counts":
-        pivot_table = liana_res.pivot_table(index=source_key, columns=target_key, aggfunc="size", fill_value=0)
+        pivot_table = liana_res.pivot_table(index=source_key, columns=target_key, aggfunc="size", fill_value=fill_value)
     elif mode == "mean":
         if score_key is None:
             raise ValueError("`score_key` must be provided when `mode='mean'`.")
-        if score_key is None:
-            raise ValueError("`score_key` must be provided!")
         pivot_table = liana_res.pivot_table(
-            index=source_key, columns=target_key, values=score_key, aggfunc="mean", fill_value=0
+            index=source_key, columns=target_key, values=score_key, aggfunc="mean", fill_value=fill_value
         )
 
     return pivot_table
@@ -45,95 +46,70 @@ def _scale_list(arr: ArrayLike, min_val: float = 1, max_val: float = 5) -> NDArr
     arr_min = np.min(values)
     arr_max = np.max(values)
 
+    if arr_max == arr_min:
+        # a single value, or all-equal values, has no range to scale into; `0/0` would make
+        # every edge and node NaN, i.e. invisible - draw them at full size instead
+        return np.full(values.shape, float(max_val))
+
     scaled: NDArray[np.floating] = (values - arr_min) / (arr_max - arr_min) * (max_val - min_val) + min_val
     return scaled
 
 
-def _set_adata_color(
-    adata: AnnData,
-    label: str,
-    color_dict: dict[str, str] | None = None,
-    hex: bool = True,
-) -> AnnData:
-    obs = get_obs(adata)
-    obs[label] = obs[label].astype("category")
-    if color_dict:
-        if not hex:
-            from matplotlib.colors import to_hex
-
-            color_dict = {x: to_hex(y) for x, y in color_dict.items()}
-
-        _dt = _get_adata_colors(adata, label)
-        _dt.update(color_dict)
-        color_dict = _dt
-        adata.uns[f"{label}_colors"] = [color_dict[x] for x in obs[label].cat.categories]
-    else:
-        if f"{label}_colors" not in adata.uns:
-            # Handle both old (_set_default...) and new (set_default...) scanpy API
-            for candidate in ("_set_default_colors_for_categorical_obs", "set_default_colors_for_categorical_obs"):
-                _set_colors = getattr(sc.pl._utils, candidate, None)
-                if _set_colors is not None:
-                    _set_colors(adata, label)
-                    break
-            else:
-                raise AttributeError(
-                    "scanpy provides neither `_set_default_colors_for_categorical_obs` "
-                    "nor `set_default_colors_for_categorical_obs`."
-                )
-
-    return adata
-
-
 def _get_adata_colors(adata: AnnData, label: str) -> dict[str, str]:
-    if f"{label}_colors" not in adata.uns:
-        _set_adata_color(adata, label)
-    return dict(zip(get_obs(adata)[label].cat.categories, adata.uns[f"{label}_colors"], strict=False))
+    """``label``'s categories mapped to their colours, without mutating ``adata``.
+
+    `circle` is read-only on the caller's object, so neither the categorical conversion nor the
+    ``{label}_colors`` palette scanpy fills in may be written back to it -- both happen on a
+    throwaway `AnnData` carrying only ``label``.
+    """
+    obs = get_obs(adata)[[label]].copy()
+    obs[label] = obs[label].astype("category")
+    local = AnnData(obs=obs)
+    key = f"{label}_colors"
+
+    if key in adata.uns:
+        local.uns[key] = list(adata.uns[key])
+    else:
+        # Handle both old (_set_default...) and new (set_default...) scanpy API
+        for candidate in ("_set_default_colors_for_categorical_obs", "set_default_colors_for_categorical_obs"):
+            _set_colors = getattr(sc.pl._utils, candidate, None)
+            if _set_colors is not None:
+                _set_colors(local, label)
+                break
+        else:
+            raise AttributeError(
+                "scanpy provides neither `_set_default_colors_for_categorical_obs` "
+                "nor `set_default_colors_for_categorical_obs`."
+            )
+
+    return dict(zip(get_obs(local)[label].cat.categories, local.uns[key], strict=False))
 
 
-def get_mask_df(
-    pivot_table: pd.DataFrame,
-    source_cell_type: list[str] | str | None = None,
-    target_cell_type: list[str] | str | None = None,
+def _filter_by_labels(
+    liana_res: pd.DataFrame,
+    source_labels: list[str] | str | None = None,
+    target_labels: list[str] | str | None = None,
     mode: Literal["and", "or"] = "or",
 ) -> pd.DataFrame:
+    """Keep the rows matching ``source_labels``/``target_labels``, before any other selection.
+
+    Dropping rows, rather than zeroing cells of the pivot, keeps the adjacency in step with the
+    labels asked for: node sizes are read off the filtered table and a label that carries no edge
+    is not drawn. A label absent from the frame raises, so a typo is not mistaken for a cell type
+    without interactions.
     """
-    Applies masking to a given table based on given source and/or target cell types and mode.
-
-    Parameters
-    ----------
-    pivot_table
-        The table to apply masking to.
-    source_cell_type
-        Source cell type(s) to mask for.
-    target_cell_type
-        Target cell type(s) to mask for.
-    mode
-        Which way to apply the mask, can be either `'and'` or `'or'` (i.e. intersection or union).
-
-    Returns
-    -------
-    The resulting masked table
-    """
-    if source_cell_type is None and target_cell_type is None:
-        return pivot_table
-
-    if isinstance(source_cell_type, str):
-        source_cell_type = [source_cell_type]
-    if isinstance(target_cell_type, str):
-        target_cell_type = [target_cell_type]
-
-    mask_df = pd.DataFrame(np.zeros_like(pivot_table), index=pivot_table.index, columns=pivot_table.columns, dtype=bool)
-
-    if mode == "or":
-        if source_cell_type is not None:
-            mask_df.loc[source_cell_type] = True
-        if target_cell_type is not None:
-            mask_df.loc[:, target_cell_type] = True
-    elif mode == "and":
-        if source_cell_type is not None and target_cell_type is not None:
-            mask_df.loc[source_cell_type, target_cell_type] = True
-
-    return pivot_table[mask_df].fillna(0)
+    masks = []
+    for labels, label_type in ((source_labels, "source"), (target_labels, "target")):
+        if labels is None:
+            continue
+        wanted = [labels] if isinstance(labels, str) else list(labels)
+        if missing := [label for label in wanted if label not in set(liana_res[label_type])]:
+            raise ValueError(f"{missing} not found in `liana_res['{label_type}']`!")
+        masks.append(np.isin(liana_res[label_type], wanted))
+    if not masks:
+        return liana_res
+    mask = np.logical_and.reduce(masks) if mode == "and" else np.logical_or.reduce(masks)
+    return liana_res[mask]
 
 
 @d.dedent
@@ -193,14 +169,14 @@ def circle(
     pivot_mode
         The mode of the pivot table, by default 'counts'.
         - 'counts': The number of connections between source and target.
-        - 'mean': The mean of the values of `score_key` between source and target cell types (groupby).
-        Note that `filter_fn` differs by pivot_mode: when counts it would remove all interactions
-        that don't pass the filter, while for 'mean' it would retain interactions don't pass the filter
-        if the same interaction passes it for any cell type pair.
+        - 'mean': The mean of the values of `score_key` between source and target cell types (groupby),
+        over the rows that pass `filter_fn`.
     mask_mode
-        The mode of the mask, by default 'or'.
-        - 'or': Include the source or target cell type.
-        - 'and': Include the source and target cell type.
+        How `source_labels` and `target_labels` are combined, by default 'or'. Both narrow the
+        interactions *before* `filter_fn`/`top_n`, so `top_n` ranks the interactions among the
+        cell types asked for; the nodes are the labels that still carry an edge.
+        - 'or': Keep an interaction whose source or whose target is among the labels.
+        - 'and': Keep an interaction whose source and whose target are among the labels.
     %(figure_size)s
     edge_alpha
         The transparency of the edges, by default .5.
@@ -226,7 +202,10 @@ def circle(
     Raises
     ------
     ValueError
-        If `groupby` is not provided
+        If `groupby` is not provided, if a `source_labels`/`target_labels` entry is not among the
+        interactions, or if none of them remain after filtering
+    KeyError
+        If `groupby` is not a column of `adata.obs`
 
     Examples
     --------
@@ -243,6 +222,7 @@ def circle(
     """
     if groupby is None:
         raise ValueError("`groupby` must be provided!")
+    _require_groupby(adata, groupby)
 
     liana_res = _prep_liana_res(
         adata=adata,
@@ -253,32 +233,49 @@ def circle(
         receptor_complex=receptor_complex,
         uns_key=uns_key,
     )
-
-    if pivot_mode == "counts":
-        if filter_fn is not None:
-            mask = liana_res.apply(filter_fn, axis=1).astype(bool)
-            liana_res = liana_res[mask]
-    elif pivot_mode == "mean":
-        liana_res = _filter_by(liana_res, filter_fn)
-    else:
+    if pivot_mode not in ("counts", "mean"):
         raise ValueError("`pivot_mode` must be 'counts' or 'mean'!")
+
+    # labels first, so that `filter_fn` and `top_n` select among the cell types asked for and
+    # nothing drawn depends on pairs the caller excluded
+    liana_res = _filter_by_labels(liana_res, source_labels=source_labels, target_labels=target_labels, mode=mask_mode)
+    if filter_fn is not None and not liana_res.empty:
+        # row-wise in both modes: a pair is kept only if it passes itself, so a 'mean' edge is the
+        # mean of passing pairs rather than of every pair of an interaction that passed elsewhere
+        liana_res = liana_res[liana_res.apply(filter_fn, axis=1).astype(bool)]
     liana_res = _get_top_n(liana_res, top_n, orderby, orderby_ascending, orderby_absolute)
 
     if inverse_score:
         liana_res[score_key] = _invert_scores(liana_res[score_key])
 
+    # absent pairs stay `NaN` here: a pair whose rows average to exactly 0 (e.g. `-log10(1)`) is
+    # still an edge, and a 0-filled adjacency could not tell the two apart
     pivot_table = _pivot_liana_res(
-        liana_res, source_key=source_key, target_key=target_key, score_key=score_key, mode=pivot_mode
+        liana_res, source_key=source_key, target_key=target_key, score_key=score_key, mode=pivot_mode, fill_value=None
     )
 
     groupby_colors = _get_adata_colors(adata, label=groupby)
 
-    # Mask pivot table
-    _pivot_table = get_mask_df(
-        pivot_table, source_cell_type=source_labels, target_cell_type=target_labels, mode=mask_mode
-    )
+    # the pivot has the observed sources as its index and the observed targets as its columns;
+    # squaring it on the labels that remain keeps the `groupby` order of the nodes
+    observed = pivot_table.index.union(pivot_table.columns)
+    order = [label for label in groupby_colors if label in observed]
+    if unknown := [label for label in observed if label not in groupby_colors]:
+        raise ValueError(f"Labels {unknown} of `liana_res` are not in `adata.obs['{groupby}']`.")
+    pivot_table = pivot_table.reindex(index=order, columns=order)
 
-    G = nx.from_pandas_adjacency(_pivot_table, create_using=nx.DiGraph)
+    weights = pivot_table.to_numpy(dtype=float)
+    rows, cols = np.nonzero(~np.isnan(weights))  # the pairs with rows, whatever their weight
+    if rows.size == 0:
+        # `_scale_list` would reduce the empty edge weights with `np.min([])`; there is no plot to draw
+        raise ValueError(
+            "No interactions remain to plot. Consider relaxing `filter_fn`, `top_n`, "
+            "`source_labels`/`target_labels` or `mask_mode`."
+        )
+    G: nx.DiGraph[str] = nx.DiGraph()
+    G.add_nodes_from(order)
+    G.add_weighted_edges_from((order[i], order[j], weights[i, j]) for i, j in zip(rows, cols, strict=True))
+    pivot_table = pivot_table.fillna(0)
     pos = nx.circular_layout(G)
 
     edge_color = [groupby_colors[cell[0]] for cell in G.edges]
@@ -286,7 +283,9 @@ def circle(
     edge_width = _scale_list(edge_width, max_val=edge_width_scale[1], min_val=edge_width_scale[0])
 
     node_color = [groupby_colors[cell] for cell in G.nodes]
-    node_size = pivot_table.sum(axis=1).to_numpy()
+    # out- plus in-degree, reindexed since `draw_networkx_nodes` takes the sizes positionally
+    degree = pivot_table.sum(axis=1) + pivot_table.sum(axis=0)
+    node_size = degree.reindex(list(G.nodes)).to_numpy()
     node_size = _scale_list(node_size, max_val=node_size_scale[1], min_val=node_size_scale[0])
 
     fig, ax = plt.subplots(figsize=figure_size)

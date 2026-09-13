@@ -8,8 +8,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from liana._core._common import _logg
+from liana._core._constants import DefaultValues as V
 from liana._core._constants import Keys as K
 from liana._core._docs import d
+from liana._core._pipe_utils._pre import _require_groupby
 from liana._core._types import get_coordinates, get_obs, get_x
 
 if TYPE_CHECKING:
@@ -38,6 +40,7 @@ def feature_by_group(
     normalize: bool = True,
     percentile_scaling: tuple[int, int] | None = None,
     show_counts: bool = True,
+    verbose: bool | None = V.verbose,
 ) -> tuple[Figure, Axes]:
     """
     Plot inflow scores for single feature across spatial coordinates.
@@ -53,11 +56,13 @@ def feature_by_group(
         From adata.var_names.
     %(figure_size)s
     normalize
-        Normalize expression values between 0 and 1 for each cell type.
+        Normalize expression values between 0 and 1 for each cell type. When `False`, each
+        colorbar spans the values it is drawn from instead of a fixed `(0, 1)`.
     percentile_scaling
         Tuple specifying percentiles for scaling.
     show_counts
         Show counts of expression cells (expression > 0).
+    %(verbose)s
 
     Returns
     -------
@@ -85,6 +90,7 @@ def feature_by_group(
         raise ValueError("`feature` must be provided.")
     if labels is None or len(labels) == 0:
         raise ValueError(f"'labels' must contain at least one label from '{groupby}', got: {labels}")
+    _require_groupby(adata, groupby)
 
     # Default colormaps if not provided
     default_cmaps = ["Blues", "Reds", "Greens", "Purples", "Oranges", "YlOrBr", "PuRd", "BuGn", "GnBu", "OrRd"]
@@ -97,7 +103,7 @@ def feature_by_group(
     for label in labels:
         mask = np.asarray(get_obs(adata)[groupby] == label)
         if not np.any(mask):
-            _logg(f"No cells found for label '{label}' in groupby '{groupby}'", level="warn", verbose=True)
+            _logg(f"No cells found for label '{label}' in groupby '{groupby}'", level="warn", verbose=verbose)
             continue
         sub_x = get_x(adata[mask, :][:, feature])
         dense = sub_x if isinstance(sub_x, np.ndarray) else sub_x.toarray()
@@ -150,7 +156,10 @@ def feature_by_group(
             alpha=0.8,
             rasterized=True,
         )
-        sc.set_clim(0, 1)
+        if normalize:
+            # the expression was rescaled into [0, 1] above; unnormalised values keep
+            # matplotlib's autoscaling, so the colorbar spans the data that is drawn
+            sc.set_clim(0, 1)
         scatter_objects.append(sc)
 
     n_bars = len(scatter_objects)

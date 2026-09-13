@@ -10,9 +10,9 @@ modality in a MuData and then run through the usual methods. Tutorials: `sc_mult
 
 ```python
 ml = li.rs.get_metalinks(tissue_location="Brain", biospecimen_location=["Blood", "Cerebrospinal Fluid"],
-                         source=["CellPhoneDB", "NeuronChat"], types=["lr", "pd"])   # downloads metalinksdb.db to cwd
+                         types=["lr", "pd"])   # caches metalinksdb.db; `source=` filters lr AND pd curators, so include rhea/recon/hmr if used
 resource = ml[ml["type"] == "lr"][["metabolite", "gene_symbol"]].rename(columns={"metabolite": "source", "gene_symbol": "receptor"})
-pd_net = (ml[ml["type"] == "pd"].groupby(["metabolite", "gene_symbol"])["mor"].mean().reset_index()
+pd_net = (ml[ml["type"] == "pd"].groupby(["metabolite", "gene_symbol"])["mor"].mean().reset_index()   # one row per curating source -> vote
             .rename(columns={"metabolite": "source", "gene_symbol": "target", "mor": "weight"}))
 t_net = ml[ml["type"] == "pd"][["metabolite", "gene_symbol", "transport_direction"]].dropna()   # optional transporters
 t_net["weight"] = t_net["transport_direction"].map({"out": 1, "in": -1})                     # export +1, import -1
@@ -25,8 +25,11 @@ li.mt.rank_aggregate(meta, groupby="cell_type", resource=resource.rename(columns
                                    "x_transform": li.pp.zi_minmax, "y_transform": li.pp.zi_minmax})
 ```
 
+- Rows are one per edge and curating `source`, so the per-edge `mean` of `mor` is a vote: an edge
+  annotated as both produced (+1) and degraded (-1) averages towards 0 and contributes nothing.
 - `get_metalinks` filters are AND-combined; `li.rs.get_metalinks_values(table, column)` lists the
-  allowed values, `li.rs.describe_metalinks()` the schema. Needs `requests`.
+  allowed values, `li.rs.describe_metalinks()` the schema. Needs `pooch`; the download is cached
+  under `sc.settings.datasetdir`, and `db_path=` reads a local copy of the database instead.
 - `estimate_metalinks` needs `decoupler>=2`; extra kwargs (e.g. `tmin`) go to both the enzyme and
   transporter steps. It returns a MuData with modalities `metabolite` (signed activity scores) and
   `receptor`. Metabolites without a transporter entry are left unmasked.

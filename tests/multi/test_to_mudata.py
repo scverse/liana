@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from anndata import AnnData, concat
+from mudata import MuData
 from pandas import DataFrame
 from tests._helpers import invalid
 
@@ -185,6 +186,48 @@ def test_lrdata_to_mudata_min_features_drops_modality() -> None:
     mdata = lrdata_to_mudata(lrdata, min_cells=None, min_features=10)
 
     assert set(mdata.mod.keys()) == {"T_cell"}
+
+
+def test_adata_to_views_all_filtered_out_raises(toy_adata: AnnData) -> None:
+    """Every view filtered out must raise, not build a silently empty `MuData(0, 0)`."""
+    with pytest.raises(ValueError, match="No modalities passed the filtering criteria"):
+        adata_to_views(
+            toy_adata,
+            groupby="bulk_labels",
+            sample_key="sample",
+            psbulk_kwargs={"raw": True, "skip_checks": True},
+            filter_samples_kwargs={"min_cells": 10**9},
+        )
+
+
+def test_lrs_to_views_all_filtered_out_raises(toy_adata: AnnData, liana_res_by_sample: DataFrame) -> None:
+    """Same guard on the LR route."""
+    toy_adata.uns["liana_results"] = liana_res_by_sample
+
+    with pytest.raises(ValueError, match="No modalities passed the filtering criteria"):
+        lrs_to_views(
+            adata=toy_adata,
+            sample_key="sample",
+            score_key="specificity_rank",
+            uns_key="liana_results",
+            lrs_per_view=10**9,  # no view can hold this many interactions
+        )
+
+
+def test_filter_view_markers_requires_every_view() -> None:
+    """A view absent from `markers` used to warn and then filter nothing at all."""
+    views = {
+        v: AnnData(
+            X=np.ones((3, 2), dtype=np.float32),
+            obs=DataFrame(index=["s1", "s2", "s3"]),
+            var=DataFrame(index=[f"{v}:g1", f"{v}:g2"]),
+        )
+        for v in ["A", "B"]
+    }
+    mdata = MuData(views)
+
+    with pytest.raises(ValueError, match="no entry for the view"):
+        filter_view_markers(mdata, {"A": ["g1"]}, var_column=None)
 
 
 def test_lrdata_to_mudata_errors() -> None:

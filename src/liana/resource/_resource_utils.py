@@ -51,6 +51,11 @@ def generate_lr_geneset(
     - weight: mean weight of the interaction
     - source: source of the interaction
 
+    Raises
+    ------
+    ValueError
+        If duplicated `source`-`target` pairs in ``net`` carry different weights.
+
     Examples
     --------
     `net` is a bipartite gene set (e.g. pathways, transcription-factor regulons)
@@ -84,6 +89,19 @@ def generate_lr_geneset(
         drop_weight = True
     else:
         drop_weight = False
+
+    # duplicated source-target rows would inflate the subunit count per complex,
+    # and the completeness check at `_assign_entity_weights` would then drop the interaction
+    duplicated = net.duplicated(subset=[source, target])
+    if duplicated.any():
+        weights_per_pair = net.groupby([source, target])[weight].nunique()
+        conflicting = weights_per_pair[weights_per_pair > 1]
+        if not conflicting.empty:
+            raise ValueError(
+                f"{len(conflicting)} duplicated '{source}'-'{target}' pair(s) in `net` disagree on "
+                f"'{weight}': {conflicting.index.tolist()}. Deduplicate `net` or pick one weight per pair."
+            )
+        net = net[~duplicated]
 
     # supp keys
     ligand_weight = ligand_key + "_" + weight

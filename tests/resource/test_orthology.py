@@ -108,3 +108,63 @@ def test_get_hcop_caches_under_datasetdir(
 
     assert [p.name for p in tmp_path.iterdir()] == ["human_mouse_hcop_fifteen_column.txt.gz"]
     pd.testing.assert_frame_equal(derived, get_hcop_orthologs(filename=hcop_file, columns=None, min_evidence=0))
+
+
+def test_translate_column_deduplicates_map_df() -> None:
+    """A duplicated `map_df` row used to count as a second ortholog and drop the gene."""
+    map_df = pd.DataFrame({"source": ["CD8A", "CD8A", "CD8B"], "target": ["Cd8a", "Cd8a", "Cd8b1"]})
+    df = pd.DataFrame({"symbol": ["CD8A_CD8B"]})
+
+    translated = translate_column(df, map_df=map_df, column="symbol")
+
+    assert translated["symbol"].tolist() == ["Cd8a_Cd8b1"]
+
+
+def test_translate_resource_warns_when_empty() -> None:
+    """Nothing translated (here: a case mismatch) used to return an empty frame silently."""
+    resource = select_resource("consensus").head(3)
+    map_df = pd.DataFrame({"source": ["lgals9", "ptprc"], "target": ["Lgals9", "Ptprc"]})
+
+    with pytest.warns(UserWarning, match="No interactions were translated"):
+        translated = translate_resource(resource, map_df)
+
+    assert translated.empty
+
+
+def _hcop_gz() -> bytes:
+    import gzip
+
+    table = "human_symbol\tmouse_symbol\tsupport\nCD8A\tCd8a\tHGNC,Inparanoid\n"
+    return gzip.compress(table.encode())
+
+
+@pytest.mark.parametrize("retry_readable", [True, False])
+def test_get_hcop_retries_unreadable_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path, retry_readable: bool
+) -> None:
+    """A truncated cached file is not hash-checked; it used to be served unvalidated forever."""
+    import pooch
+
+    content = _hcop_gz()
+    cached = tmp_path / "human_mouse_hcop_fifteen_column.txt.gz"
+    truncated = content[: len(content) // 2]
+    cached.write_bytes(truncated)
+    payload = content if retry_readable else content[:10]
+
+    def _fake_retrieve(url: str, known_hash: str | None, fname: str, path: pathlib.Path) -> str:
+        target = pathlib.Path(path) / fname
+        target.write_bytes(payload)
+        return str(target)
+
+    monkeypatch.setattr(pooch, "retrieve", _fake_retrieve)
+
+    if retry_readable:
+        with pytest.warns(UserWarning, match="could not be read"):
+            mapping = get_hcop_orthologs(filename=cached, min_evidence=0)
+        assert mapping["human_symbol"].tolist() == ["CD8A"]
+        assert cached.read_bytes() == content
+    else:
+        with pytest.warns(UserWarning, match="could not be read"), pytest.raises(OSError, match="downloading it again"):
+            get_hcop_orthologs(filename=cached, min_evidence=0)
+        # a failed retry must not cost the user their cache
+        assert cached.read_bytes() == truncated

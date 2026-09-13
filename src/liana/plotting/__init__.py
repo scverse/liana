@@ -30,7 +30,7 @@ __all__ = [
     "tileplot",
 ]
 
-_RENAMED_IN = "2.1"
+_RENAMED_IN = "2.0.0"
 """The release that settled the plotting names.
 
 Plot functions are bare nouns, as in :mod:`scanpy.pl`, and carry the prefix of the method they belong to when they only apply to that method.

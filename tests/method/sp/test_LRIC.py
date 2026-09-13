@@ -256,7 +256,6 @@ def test_cross_pcf_pair_values(cross_pcf_pair: pd.DataFrame) -> None:
     result = cross_pcf_pair
     assert _cell_types(result) == ["CD14+ Monocyte", "CD19+ B"]
     assert len(result) == 5  # the single unordered pair, once
-    np.testing.assert_almost_equal(_curve(result, source="CD14+ Monocyte", target="CD19+ B").sum(), 5.541360, decimal=3)
 
 
 @pytest.mark.parametrize("annulus_steps", [1, 2])
@@ -284,6 +283,32 @@ def test_cross_pcf_matches_brute_force(adata: AnnData, annulus_steps: int) -> No
         expected = is_source.sum() * is_target.sum() * in_annulus.sum() / (n_cells * (n_cells - 1))
         observed = in_annulus[np.ix_(is_source, is_target)].sum()
         np.testing.assert_allclose(g, observed / expected, rtol=1e-5, atol=1e-6)
+
+
+def test_cross_pcf_selection_preserves_the_support(adata: AnnData, cross_pcf_result: pd.DataFrame) -> None:
+    """`cell_types` / `groupby_pairs` must filter the emitted pairs, not the point pattern.
+
+    `g(r)` is a random-labelling null conditioned on the observed cell positions,
+    so subsetting the AnnData first moves `N` and `T(r)` and destroys the very
+    co-localisation it was asked to report -- on a structured slide the contact
+    band collapsed from g = 3.18 to exactly 1.0.
+    """
+    a, b = "CD14+ Monocyte", "CD19+ B"
+    full = _curve(cross_pcf_result, source=a, target=b)
+
+    by_types = as_frame(cross_pcf(adata, groupby="cell_type", cell_types=[a, b], inplace=False, **_KWARGS))
+    np.testing.assert_array_almost_equal(_curve(by_types, source=a, target=b), full, decimal=6)
+
+    by_pairs = as_frame(
+        cross_pcf(
+            adata,
+            groupby="cell_type",
+            groupby_pairs=pd.DataFrame({"source": [a], "target": [b]}),
+            inplace=False,
+            **_KWARGS,
+        )
+    )
+    np.testing.assert_array_almost_equal(_curve(by_pairs, source=a, target=b), full, decimal=6)
 
 
 def test_cross_pcf_groupby_pairs(adata: AnnData) -> None:
@@ -320,19 +345,19 @@ def test_cross_pcf_groupby_pairs(adata: AnnData) -> None:
     np.testing.assert_array_almost_equal(result["g"], unfiltered.loc[keep, "g"], decimal=6)
 
 
-def test_cross_pcf_groupby_pairs_unknown_type_warns(adata: AnnData, caplog: pytest.LogCaptureFixture) -> None:
+def test_cross_pcf_groupby_pairs_unknown_type_warns(adata: AnnData) -> None:
     # a typo'd cell type used to yield an empty frame and no explanation
-    result = as_frame(
-        cross_pcf(
-            adata,
-            groupby="cell_type",
-            inplace=False,
-            groupby_pairs=pd.DataFrame({"source": ["CD19+ Bee"], "target": ["CD34+"]}),
-            **_KWARGS,
+    with pytest.warns(UserWarning, match=r"not in the data.*CD19\+ Bee"):
+        result = as_frame(
+            cross_pcf(
+                adata,
+                groupby="cell_type",
+                inplace=False,
+                groupby_pairs=pd.DataFrame({"source": ["CD19+ Bee"], "target": ["CD34+"]}),
+                **_KWARGS,
+            )
         )
-    )
     assert result.empty
-    assert "not in the data" in caplog.text and "CD19+ Bee" in caplog.text
 
 
 def test_cross_pcf_inplace(adata_copy: AnnData) -> None:
@@ -561,6 +586,50 @@ def test_lric_pairwise_cell_types_and_min_cells(
     strict = as_frame(lric(adata, resource=resource, groupby="cell_type", min_cells=200, inplace=False, **_KWARGS))
     assert len(_cell_types(strict)) < len(_cell_types(default))
 
+    # a requested type that `min_cells` dropped is not "not in the data" -- CD19+ B has 95 cells
+    with pytest.warns(UserWarning, match=r"dropped by `min_cells`: \['CD19\+ B'\]"):
+        lric(
+            adata,
+            resource=resource,
+            groupby="cell_type",
+            cell_types=["Dendritic", "CD14+ Monocyte", "CD19+ B"],
+            min_cells=100,
+            inplace=False,
+            **_KWARGS,
+        )
+
+
+def test_lric_pairwise_selection_preserves_the_support(
+    adata: AnnData, resource: pd.DataFrame, lric_pairwise: pd.DataFrame
+) -> None:
+    """`cell_types` filters the emitted pairs, not the support the null conditions on.
+
+    `_expected_pairs` reads `N` and `T(r)` off the post-`prep_check_adata` object,
+    so subsetting the cells used to move every curve it was asked to report.
+    """
+    source, target = "CD14+ Monocyte", "CD19+ B"
+    sub = as_frame(
+        lric(
+            adata,
+            resource=resource,
+            groupby="cell_type",
+            cell_types=[source, target],
+            expr_prop=0,
+            inplace=False,
+            **_KWARGS,
+        )
+    )
+    order = ["interaction", "radius"]
+
+    def _block(df: pd.DataFrame) -> pd.DataFrame:
+        sel = df[(df["source"] == source) & (df["target"] == target)]
+        return sel.sort_values(order).reset_index(drop=True)
+
+    narrowed, everything = _block(sub), _block(lric_pairwise)
+    assert len(narrowed) == 5 * 5  # 5 LR pairs x 5 radius bins
+    for col in ("g", "g_expr", "g_pcf"):
+        np.testing.assert_array_almost_equal(narrowed[col], everything[col], decimal=5)
+
 
 def _directed_pairs(df: pd.DataFrame) -> set[tuple[str, str]]:
     return set(map(tuple, df[["source", "target"]].astype(str).drop_duplicates().to_numpy()))
@@ -747,6 +816,18 @@ def test_lric_pairwise_constant_expression_is_one() -> None:
     np.testing.assert_allclose(g_expr[keep], 1.0, atol=1e-9)
     np.testing.assert_allclose(mat[keep], g_pcf[keep], rtol=1e-5)
     np.testing.assert_allclose(g_pcf[keep], 1.0, atol=0.1)
+
+
+def test_lric_negative_layer_raises(adata: AnnData, resource: pd.DataFrame) -> None:
+    # a scaled/centred layer used to run through silently: `_linear_transform` divides by
+    # a per-gene mean that sits near 0, so `g(r)` came out as noise rather than as an
+    # obviously broken number
+    scaled = adata.copy()
+    scaled.layers["scaled"] = _to_dense(get_csr(scaled)) - 1.0
+    with raises(ValueError, match="negative values"):
+        lric(scaled, resource=resource, layer="scaled", use_raw=False, inplace=False, **_KWARGS)
+    # the mean == 0 fallback stays: an all-zero gene is legitimate and must not become NaN
+    assert (_linear_transform(np.zeros((3, 2))) == 0).all()
 
 
 def test_lric_no_lr_pairs_raises(adata: AnnData) -> None:

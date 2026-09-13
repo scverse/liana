@@ -133,7 +133,9 @@ def process_scores(liana_res: DataFrame, score_key: str, inverse_fn: ScoreTransf
 
 
 __all__ = [
+    "AggregateClass",
     "MistyData",
+    "aggregate_meta",
     "bivariate",
     "cellchat",
     "cellphonedb",

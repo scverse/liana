@@ -26,7 +26,7 @@ def assert_covered(
     subset_name: str = "resource",
     superset_name: str = "var_names",
     prop_missing_allowed: float = 0.98,
-    verbose: bool = False,
+    verbose: bool | None = False,
 ) -> None:
     """
     Assert if elements are covered at a decent proportion
@@ -70,8 +70,12 @@ def assert_covered(
 
     _logg(
         f"{prop_missing:.2f} of entities in the resource are missing from the data.",
-        verbose=verbose & (prop_missing > 0),
+        verbose=bool(verbose) & (prop_missing > 0),
     )
+
+
+_LOG1P_CEILING = 50.0
+"""Above this, a matrix cannot be `log1p`-normalised expression."""
 
 
 def prep_check_adata(
@@ -84,7 +88,9 @@ def prep_check_adata(
     obsm: Mapping[str, ObsmValue | AnnData] | None = None,
     uns: dict[str, Any] | None = None,
     complex_sep: str | None = "_",
-    verbose: bool = False,
+    block_negatives: bool = False,
+    check_lognorm: bool = True,
+    verbose: bool | None = False,
 ) -> AnnData:
     """
     Check if the anndata object is in the correct format and preprocess
@@ -112,13 +118,24 @@ def prep_check_adata(
         `AnnData.uns` unspecified mappings to inmclude in the resulting AnnData
     complex_sep
         Separator to use for complex names.
+    block_negatives
+        Reject a matrix carrying negative values. The single-cell methods assume non-negative
+        expression -- `sqrt`, `log2` and `gmean` of a negative mean are all `NaN` -- as does
+        `lric`, whose weights are expression relative to a per-gene mean; the bivariate and
+        MISTy methods work on signed data of any scale and leave it `False`.
+    check_lognorm
+        Whether to also warn when `block_negatives` input does not look log1p-normalised --
+        `_expm1_base` overflows on counts. Off for callers that only need non-negative
+        expression, such as `lric`: any positive rescaling cancels in its ratio, so it has
+        no log1p assumption to advise about.
     verbose
         Verbosity flag.
 
     Raises
     ------
     ValueError
-        If the data matrix contains non-finite values (NaN or Inf)
+        If the data matrix contains non-finite values (NaN or Inf), or negative
+        values while `block_negatives` is set.
 
     Returns
     -------
@@ -167,16 +184,42 @@ def prep_check_adata(
     msk_samples = np.asarray(X.sum(axis=1)).ravel() == 0
     n_empty_samples = int(np.sum(msk_samples))
     if n_empty_samples > 0:
-        _logg(f"{n_empty_samples} samples of mat are empty, they will be removed.", level="warn", verbose=verbose)
-
-    # Check if log-norm
-    _sum = np.sum(X.data[0:100])
-    if _sum == np.floor(_sum):
-        _logg("Make sure that normalized counts are passed!", level="warn", verbose=verbose)
+        _logg(
+            f"{n_empty_samples} cells of mat have no expressed features; they will be scored as zero.",
+            level="warn",
+            verbose=verbose,
+        )
 
     # Check for non-finite values
     if np.any(~np.isfinite(X.data)):
         raise ValueError("mat contains non finite values (nan or inf), please set them to 0 or remove them.")
+
+    # Both checks below only concern callers that need non-negative expression, the second of them
+    # only those that also assume it is log-normalised. `X.data` is empty when every feature was
+    # stripped above, and `.max()`/`.min()` have no identity on an empty array.
+    if block_negatives and X.data.size:
+        # Reject before advising on normalisation: negative input is scaled, so telling its owner to
+        # go and check for counts on the way out would only misdirect.
+        if (trough := float(X.data.min())) < 0:
+            raise ValueError(
+                f"mat contains negative values (minimum: {trough:.4g}), but this method requires "
+                "non-negative expression -- scaled or centred data is meaningless here. Pass "
+                "non-negative (log-normalised) expression via `use_raw=True`, `layer=...`, or place "
+                "it in `.X`."
+            )
+
+        if check_lognorm:
+            sample = X.data[:: max(1, X.data.size // 2000)]
+            peak = float(X.data.max())
+            integral = peak > 1 and bool(np.allclose(sample, np.round(sample)))
+            if integral or peak > _LOG1P_CEILING:
+                reason = "its values are all integers" if integral else f"its maximum is {peak:.6g}"
+                _logg(
+                    f"mat does not look log1p-normalised -- {reason}. Pass log-normalised counts via "
+                    "`use_raw=True`, `layer=...`, or place them in `.X`.",
+                    level="warn",
+                    verbose=verbose,
+                )
 
     if groupby is not None:
         _check_groupby(adata, groupby, verbose)
@@ -186,6 +229,24 @@ def prep_check_adata(
 
         obs = get_obs(adata)
         obs["@label"] = obs[groupby]
+
+        # A cell with no group is an input error rather than something to silently reassign: the
+        # unlabelled row leaves an all-False mask downstream, which `np.argmax` folds into the first
+        # label (permutation nulls) or drops (per-group statistics). Neither is what the caller asked for.
+        if (n_unlabelled := int(obs[groupby].isna().sum())) > 0:
+            raise ValueError(
+                f"{n_unlabelled} of {obs.shape[0]} cells carry no `{groupby}` label -- the column holds "
+                f"NaN for them. Drop or label those cells first, e.g. "
+                f"`adata = adata[adata.obs[{groupby!r}].notna()].copy()`."
+            )
+
+        if min_cells is None:
+            # `count >= None` is all-False in pandas, which would delete every cell and surface
+            # much later as an `IndexError` on an empty result.
+            raise ValueError(
+                f"`min_cells` must be an integer when `groupby` is given, got None. "
+                f"Pass `min_cells=0` to keep every group of `{groupby}`."
+            )
 
         # Remove any cell types below X number of cells per cell type
         count_cells = obs.groupby(groupby)[groupby].size().reset_index(name="count").copy()
@@ -208,7 +269,7 @@ def prep_check_adata(
     return adata
 
 
-def check_vars(var_names: Iterable[str], complex_sep: str | None, verbose: bool = False) -> list[str]:
+def check_vars(var_names: Iterable[str], complex_sep: str | None, verbose: bool | None = False) -> list[str]:
     """
     Raise a warning if `complex_sep` is part of any variable name.
 
@@ -222,11 +283,14 @@ def check_vars(var_names: Iterable[str], complex_sep: str | None, verbose: bool 
     """
     var_issues = [] if complex_sep is None else [name for name in var_names if complex_sep in name]
 
-    _logg(
-        f"{var_issues} contain `{complex_sep}`. Consider replacing those!",
-        verbose=verbose & (len(var_issues) > 0),
-        level="warn",
-    )
+    # Guard the call, not the verbosity: folding "is there anything to say" into `verbose` made the
+    # message fire with an empty list as soon as `warn` stopped being gated.
+    if var_issues:
+        _logg(
+            f"{var_issues} contain `{complex_sep}`. Consider replacing those!",
+            verbose=verbose,
+            level="warn",
+        )
 
     return var_issues
 
@@ -267,7 +331,7 @@ def filter_resource(resource: DataFrame, var_names: Index | NDArray[Any]) -> Dat
 
 
 def _choose_mtx_rep(
-    adata: AnnData, use_raw: bool = False, layer: str | None = None, verbose: bool = False
+    adata: AnnData, use_raw: bool = False, layer: str | None = None, verbose: bool | None = False
 ) -> csr_matrix:
     """
     Choose matrix (adapted from scanpy)
@@ -306,7 +370,17 @@ def _choose_mtx_rep(
     return csr_matrix(chosen)
 
 
-def _check_groupby(adata: AnnData, groupby: str, verbose: bool) -> None:
+def _require_groupby(adata: AnnData, groupby: str) -> None:
+    """Check that ``groupby`` names an ``obs`` column, without touching the caller's object.
+
+    `_check_groupby` also converts the column to categorical in place, which is a side effect the
+    read-only entry points (plotting, proximity) must not have.
+    """
+    if groupby not in get_obs(adata).columns:
+        raise KeyError(f"`{groupby}` not found in `adata.obs.columns`.")
+
+
+def _check_groupby(adata: AnnData, groupby: str, verbose: bool | None) -> None:
     obs = get_obs(adata)
     if groupby not in obs.columns:
         raise KeyError(f"`{groupby}` not found in `adata.obs.columns`.")

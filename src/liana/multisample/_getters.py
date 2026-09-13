@@ -59,7 +59,9 @@ def get_factor_scores(
 
     # join with metadata
     if obs_keys is not None:
-        df = df.merge(obs[obs_keys].reset_index())
+        # positional concat: `.obsm` is row-aligned to `.obs`, and a relational merge
+        # would cross-join whenever `obs_names` are duplicated
+        df = pd.concat([df, obs[obs_keys].reset_index(drop=True)], axis=1)
 
     return df
 

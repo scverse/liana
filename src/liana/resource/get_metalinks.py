@@ -6,12 +6,13 @@ import pooch
 import scanpy as sc
 
 from liana._core._common import _logg
+from liana._core._docs import d
 
 _METALINKS_URL = "https://github.com/scverse/liana/releases/download/metalinksdb/metalinksdb.db"
 _METALINKS_HASH = "sha256:84df58e659cd0fe318b10f6d5d7ac1f16806b1088701fccf4260e78ba0982513"
 
 
-def _download_metalinksdb(cache_dir: str | Path | None = None, verbose: bool = True) -> Path:
+def _download_metalinksdb(cache_dir: str | Path | None = None, verbose: bool | None = True) -> Path:
     """
     Ensures the Metalinksdb is downloaded and available for use.
 
@@ -34,7 +35,7 @@ def _download_metalinksdb(cache_dir: str | Path | None = None, verbose: bool = T
             known_hash=_METALINKS_HASH,
             fname="metalinksdb.db",
             path=sc.settings.datasetdir if cache_dir is None else cache_dir,
-            progressbar=verbose,
+            progressbar=bool(verbose),
         )
     )
 
@@ -50,6 +51,7 @@ def _format_clauses(
         where_clauses.append(f"{table_ref}.{column_name} IN ({formatted_str})")
 
 
+@d.dedent
 def get_metalinks(
     db_path: str | Path | None = None,
     types: str | list[str] | None = None,
@@ -70,8 +72,7 @@ def get_metalinks(
 
     Parameters
     ----------
-    db_path
-        Path to the SQLite database file. If None, the database will be downloaded to the current working directory.
+    %(db_path)s
     types
         Desired edge types. Options are: ['lr', 'pd'], where 'lr' stands for 'ligand-receptor' and 'pd' stands for 'production-degradation'.
     cell_location
@@ -93,7 +94,8 @@ def get_metalinks(
 
     Returns
     -------
-    A pandas DataFrame containing the query results without the source column.
+    A pandas DataFrame with one row per edge and curating `source`, so an edge annotated by several
+    databases appears once per database and a per-edge mean of `mor` is a vote across them.
 
     Examples
     --------
@@ -109,7 +111,7 @@ def get_metalinks(
     path = Path(db_path) if db_path is not None else _download_metalinksdb()
     conn = sqlite3.connect(path)
 
-    # Adjusted SELECT statement to exclude the source column
+    # one row per (edge, source); `source` is kept so that edges can be weighted by their curators
     base_query = """
     SELECT DISTINCT e.hmdb as hmdb,
                 e.uniprot AS uniprot,
@@ -175,6 +177,7 @@ def get_metalinks(
     return df
 
 
+@d.dedent
 def get_metalinks_values(table_name: str, column_name: str, db_path: str | None = None) -> list[str]:
     """
     Fetches distinct values from a specified column in a specified table.
@@ -185,8 +188,7 @@ def get_metalinks_values(table_name: str, column_name: str, db_path: str | None 
         Name of the table from which to fetch distinct values.
     column_name
         Name of the column from which to fetch distinct values.
-    db_path
-        Path to the SQLite database file. If None, the database will be downloaded to the current working directory.
+    %(db_path)s
 
     Returns
     -------
@@ -211,14 +213,14 @@ def get_metalinks_values(table_name: str, column_name: str, db_path: str | None 
     return [value[0] for value in distinct_values]
 
 
+@d.dedent
 def describe_metalinks(db_path: str | None = None, return_output: bool = False) -> str | None:
     """
     Prints the schema information and foreign key details for all tables in the specified SQLite database.
 
     Parameters
     ----------
-    db_path
-        Path to the SQLite database file. If None, the database will be downloaded to the current working directory.
+    %(db_path)s
     return_output
         Whether to return the output or just print it.
 

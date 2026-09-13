@@ -44,11 +44,10 @@ def lric_lineplot(
     Parameters
     ----------
     %(adata)s
-        Its ``.uns[uns_key]`` holds the result. Mutually exclusive with
-        ``liana_res``.
+        Its ``.uns[uns_key]`` holds the result, read when ``liana_res`` is ``None``.
     %(uns_key)s
     %(liana_res)s
-        A ``lric`` / ``cross_pcf`` result, used when ``adata`` is ``None``.
+        A ``lric`` / ``cross_pcf`` result.
     interaction
         The ``interaction`` to plot -- ``"source^target"`` for ``cross_pcf``,
         ``"ligand^receptor"`` for ``lric``.
@@ -151,11 +150,10 @@ def lric_divergence(
     Parameters
     ----------
     %(adata)s
-        Its ``.uns[uns_key]`` holds the result. Mutually exclusive with
-        ``liana_res``.
+        Its ``.uns[uns_key]`` holds the result, read when ``liana_res`` is ``None``.
     %(uns_key)s
     %(liana_res)s
-        A ``lric`` / ``cross_pcf`` result, used when ``adata`` is ``None``.
+        A ``lric`` / ``cross_pcf`` result.
     feature_a
         Selection of the first curve as ``{column: value}`` over any columns of
         the result, e.g. ``dict(interaction="Dcn^Egfr")``. It must resolve to a

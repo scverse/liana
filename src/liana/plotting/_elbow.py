@@ -25,9 +25,10 @@ def elbow(
         AnnData on which :func:`liana.ms.nmf` was run with `n_components=None`;
         reads `adata.uns['nmf_errors']` and `adata.uns['nmf_rank']`.
     errors
-        Error curve as returned by :func:`liana.ms.estimate_elbow`; used when `adata` is None.
+        Error curve as returned by :func:`liana.ms.estimate_elbow`; takes precedence over
+        `adata.uns['nmf_errors']`.
     rank
-        Estimated rank to mark with a dashed line; used when `adata` is None.
+        Estimated rank to mark with a dashed line; takes precedence over `adata.uns['nmf_rank']`.
     %(figure_size)s
     %(return_fig)s
 
@@ -45,12 +46,14 @@ def elbow(
     >>> import liana as li
     >>> adata = li.ds.generate_toy_spatial()
     >>> lrdata = li.mt.bivariate(adata, resource_name="consensus", local_name="cosine", global_name=None, n_perms=None)
-    >>> li.ms.nmf(lrdata, n_components=None, k_range=range(1, 5), random_state=0, max_iter=200)
+    >>> li.ms.nmf(lrdata, n_components=None, k_range=range(1, 6), random_state=0, max_iter=200)
     >>> p = li.pl.elbow(lrdata)
 
     """
+    # an explicitly passed curve or rank wins; `adata` only fills in what was not given
     if adata is not None:
-        errors, rank = adata.uns.get("nmf_errors"), adata.uns.get("nmf_rank")
+        errors = adata.uns.get("nmf_errors") if errors is None else errors
+        rank = adata.uns.get("nmf_rank") if rank is None else rank
     if errors is None:
         raise ValueError("No error curve found. Run `li.ms.nmf` with `n_components=None`, or pass `errors`.")
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import reduce
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -15,13 +14,31 @@ if TYPE_CHECKING:
     from liana.method.sc._rank_aggregate import AggregateClass
 
 
+def _assign_min_or_max(x: pd.Series, x_ascending: bool | None) -> float:
+    """The worst *observed* value of a score column, in the direction the column is ranked.
+
+    `NaN` is ignored rather than propagated, so the value can be used to fill it.
+
+    Raises
+    ------
+    ValueError
+        If every value is missing, which leaves no observed value to fall back on.
+    """
+    values = np.asarray(x, dtype=float)
+    if values.size == 0 or bool(np.isnan(values).all()):
+        raise ValueError(
+            f"Score column {getattr(x, 'name', None)!r} holds no value to rank: it is empty or entirely NaN."
+        )
+    return float(np.nanmax(values) if x_ascending else np.nanmin(values))
+
+
 def _aggregate(
     lrs: dict[str, pd.DataFrame],
     consensus: AggregateClass,
     aggregate_method: Literal["rra", "mean"] = "rra",
     _consensus_opts: list[str] | None = None,
     _key_cols: list[str] | None = None,
-    verbose: bool = False,
+    verbose: bool | None = False,
 ) -> pd.DataFrame:
     """
     Function to aggregate the results of all methods into a single DataFrame.
@@ -53,13 +70,13 @@ def _aggregate(
     if _consensus_opts is None:
         _consensus_opts = ["Magnitude", "Specificity"]
 
-    frames = [lrs[method].drop_duplicates(keep="first") for method in lrs]
-    # reduce to a df with the shared keys + all relevant sc
-    lr_res = reduce(
-        lambda left, right: pd.merge(left, right, how="outer", on=_key_cols, suffixes=("", "_duplicated")), frames
-    )
-    # drop duplicated columns
-    lr_res = lr_res.loc[:, ~lr_res.columns.str.endswith("_duplicated")]
+    # Per-entity columns are payload, not keys: complexes are reassembled per method and methods can
+    # keep different subunits of the same complex, so the leftmost method in `methods=` wins.
+    frames = list(lrs.values())
+    lr_res = frames[0].copy()
+    for frame in frames[1:]:
+        shared = frame.columns.difference(_key_cols).intersection(lr_res.columns)
+        lr_res = lr_res.merge(frame.drop(columns=shared), how="outer", on=_key_cols)
 
     order_col = ""
     if "Specificity" in _consensus_opts:
@@ -86,7 +103,7 @@ def _rank_aggregate(
     lr_res: pd.DataFrame,
     specs: dict[str, tuple[str, bool | None]],
     aggregate_method: Literal["rra", "mean"],
-    verbose: bool = False,
+    verbose: bool | None = False,
 ) -> NDArray[np.floating]:
     """
     Aggregate method ranks
@@ -109,6 +126,7 @@ def _rank_aggregate(
     if aggregate_method not in ("rra", "mean"):
         raise ValueError(f"`aggregate_method` must be 'rra' or 'mean', got {aggregate_method!r}.")
 
+    all_cols = sorted({spec[0] for spec in specs.values()})
     # methods whose score was not computed (e.g. permutation p-values with `n_perms=None`) have no column
     specs = {method: spec for method, spec in specs.items() if spec[0] in lr_res.columns}
     # rank each unique score column once (Connectome and NATMI share `expr_prod`)
@@ -116,11 +134,30 @@ def _rank_aggregate(
     for col, asc in specs.values():
         if columns.setdefault(col, asc) != asc:
             raise ValueError(f"Column `{col}` is ranked in opposite directions by different methods.")
+    if not columns:
+        raise ValueError(
+            f"No score column is available to aggregate: none of {all_cols} is in the results. "
+            "With `n_perms=None` methods whose specificity is a permutation p-value have no "
+            "specificity score; pass `consensus_opts=['Magnitude']` or set `n_perms`."
+        )
     if len(columns) < 2:
         _logg(f"Aggregating over {len(columns)} score(s) only: {sorted(columns)}.", level="warn", verbose=verbose)
 
+    # `rankdata` defaults to `nan_policy="propagate"`, which turns the whole column NaN on a single
+    # missing score; a missing score instead ties with the worst observed one, as `return_all_lrs`
+    # rows already do.
+    n_missing = lr_res[list(columns)].isna().sum()
+    if n_missing.any():
+        _logg(
+            f"Missing scores were ranked as the worst observed value in: {n_missing[n_missing > 0].to_dict()}",
+            level="warn",
+            verbose=verbose,
+        )
     rmat: NDArray[np.floating] = np.column_stack(
-        [rankdata(lr_res[col] if asc else -lr_res[col], method="average") for col, asc in columns.items()]
+        [
+            rankdata(lr_res[col].fillna(_assign_min_or_max(lr_res[col], asc)) * (1 if asc else -1), method="average")
+            for col, asc in columns.items()
+        ]
     )
 
     if aggregate_method == "rra":
