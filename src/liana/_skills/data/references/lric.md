@@ -31,8 +31,9 @@ li.mt.lric(adata, resource_name="mouseconsensus", groupby="cell_type")   # radii
 - `nz_prop` applies in the agnostic mode (fraction of all cells), `expr_prop` in the directed mode
   (fraction within each cell type). Masked pairs stay as NaN rows.
 - `groupby_pairs` and `cell_types` restrict which pairs are *emitted*, not which cells are used
-  (the null conditions on the whole slide), so they do not make the call faster; `pair_chunk` is
-  deprecated and ignored.
+  (the null conditions on the whole slide), so they do not make the call faster.
+- Weights are the expression as given; per-gene rescaling cancels in `g(r)`. To weight by a nonlinear
+  transform (e.g. `sqrt`), store it in a layer and pass `layer=`.
 
 ## Summaries and plots
 

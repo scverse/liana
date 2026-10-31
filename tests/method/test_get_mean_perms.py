@@ -6,7 +6,14 @@ from anndata import AnnData
 from pandas import DataFrame, read_csv
 from tests._helpers import get_obs, get_raw_x, get_x
 
-from liana._core._pipe_utils._get_mean_perms import _get_mat_idx, _get_means_perms
+from liana._core._pipe_utils import _get_mean_perms
+from liana._core._pipe_utils._get_mean_perms import (
+    _calculate_pvals,
+    _get_mat_idx,
+    _get_means_perms,
+    _PermStatChunks,
+)
+from liana.method.sc._cellphonedb import _mean
 
 
 @pytest.fixture
@@ -100,3 +107,31 @@ def test_cellchat_perms(adata: AnnData) -> None:
     expected = perms.sum(axis=0).sum(axis=1)
 
     np.testing.assert_almost_equal(expected, desired, decimal=6)
+
+
+def test_perm_stat_chunks_match_whole_tensor(
+    adata: AnnData, all_defaults: DataFrame, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Blocks concatenate to the whole tensor, and p-values do not depend on the block size."""
+    perms = _get_means_perms(
+        adata=adata, norm_factor=None, aggregation="mean", n_perms=23, seed=1337, n_jobs=1, verbose=False
+    )
+    ligand_idx, receptor_idx, source_idx, target_idx = _get_mat_idx(adata, all_defaults)
+    whole = np.stack((perms[:, source_idx, ligand_idx], perms[:, target_idx, receptor_idx]), axis=0)
+    truth = _mean(whole[:, 0, :])  # any per-interaction reference works; ties are exercised too
+    chunks = _PermStatChunks(perms, source_idx, ligand_idx, target_idx, receptor_idx)
+
+    # reference: the whole-tensor computation the chunked loop replaced
+    stat = _mean(whole, axis=0)
+    expected = (np.greater_equal(stat, truth) | np.isclose(stat, truth, rtol=1e-6, atol=0.0)).sum(axis=0) / 23
+
+    single = _calculate_pvals(truth, chunks, _mean)
+    assert len(list(chunks)) == 1
+    np.testing.assert_array_equal(single, expected)
+
+    # cap so that 5 permutations fit a block: 23 perms -> blocks of 5, 5, 5, 5, 3
+    monkeypatch.setattr(_get_mean_perms, "_MAX_PERM_STAT_ELEMENTS", 5 * ligand_idx.size)
+    blocks = list(chunks)
+    assert [b.shape[1] for b in blocks] == [5, 5, 5, 5, 3]
+    np.testing.assert_array_equal(np.concatenate(blocks, axis=1), whole)
+    np.testing.assert_array_equal(_calculate_pvals(truth, chunks, _mean), single)

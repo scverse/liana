@@ -1,6 +1,17 @@
 # Changelog
 
-## 2.0.0 (unreleased)
+## 2.1.0 (unreleased)
+
+### Removed
+
+- **Breaking: `li.mt.lric(pair_chunk=...)` is removed**, after being deprecated and ignored in 2.0.0.
+- **Breaking: `li.mt.lric(transform_fn=...)` is removed.** Its default, mean-normalising each gene to 1, was a redundant: after introducing analytical normalisation for the area of interest, any per-gene rescaling cancels exactly in every LRIC ratio (`g`, `g_expr`). To weight by a nonlinear transform of expression, store it as a layer and pass it -- e.g. `adata.layers["sqrt"] = adata.X.sqrt()`, then `li.mt.lric(..., layer="sqrt")`. Unlike `transform_fn`, a layer goes through the non-negativity check.
+
+### Changed
+
+- The permutation statistics behind `cellphonedb`, `cellchat`, `geometric_mean` and `rank_aggregate` p-values are gathered and reduced a block of permutations at a time instead of as one `(2, n_perms, n_interactions)` tensor, so their peak memory no longer scales with `n_perms` (#282, by @pwwang). P-values are bit-identical for a given seed (6.35 GB to 1.64 GB peak on 450k interactions x 300 permutations).
+
+## 2.0.0 (31.10.2026)
 
 liana+ now has a new home under the scverse organisation.
 

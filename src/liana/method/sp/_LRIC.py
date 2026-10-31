@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from functools import partial
 from typing import TYPE_CHECKING, Any, NamedTuple
-from warnings import warn
 
 import numba as nb
 import numpy as np
@@ -12,7 +11,6 @@ from anndata import AnnData
 from numpy.typing import ArrayLike, NDArray
 from scipy.sparse import sparray, spmatrix
 from scipy.spatial import cKDTree
-from scverse_misc import Deprecation
 from tqdm import tqdm
 
 from liana._core._common import _logg
@@ -30,15 +28,6 @@ if TYPE_CHECKING:
     prange = range
 else:
     prange = nb.prange
-
-_PAIR_CHUNK_DEPRECATION = Deprecation(
-    "2.1", "The weighted numerator no longer holds per-chunk temporaries, so there is nothing to tune."
-)
-"""Why `lric`'s `pair_chunk` no longer does anything."""
-
-
-type Transform = Callable[[np.ndarray], np.ndarray]
-"""Rescales an expression matrix before ligand/receptor weights are formed."""
 
 _MIN_CELLS_FRAC = 0.01
 
@@ -64,37 +53,20 @@ def _default_min_cells(adata: AnnData, min_cells: int | None, verbose: bool | No
     return default
 
 
-def _linear_transform(expr: np.ndarray) -> np.ndarray:
-    """Mean-normalise to a mean of 1.
-
-    A column whose mean is 0 is passed through unscaled rather than divided:
-    that is an all-zero gene (negative input is rejected upstream by
-    ``prep_check_adata(block_negatives=True)``), so the column is already 0 and
-    dividing would only turn it into ``NaN``.
-    """
-    mean = expr.mean(axis=0, keepdims=True)
-    smean = np.where(mean > 0, mean, 1.0)
-    return expr / smean
-
-
 def _to_dense(X: MatrixLike) -> np.ndarray:
     dense = X.toarray() if isinstance(X, spmatrix | sparray) else X
     return np.asarray(dense, dtype=np.float32)
 
 
-def _pair_weights(
-    adata: AnnData,
-    gene_names: list[str],
-    idx: np.ndarray,
-    transform: Callable[[np.ndarray], np.ndarray],
-) -> np.ndarray:
+def _pair_weights(adata: AnnData, gene_names: list[str], idx: np.ndarray) -> np.ndarray:
     """Per-pair expression weights.
 
-    Transform the unique-gene matrix, then gather to per-pair columns ``idx``;
-    returns ``(n_cells, n_pairs)``. ``use_raw``/``layer`` are already resolved
-    into ``.X`` by ``prep_check_adata``.
+    Gather the unique-gene matrix to per-pair columns ``idx``; returns
+    ``(n_cells, n_pairs)``. ``use_raw``/``layer`` are already resolved into
+    ``.X`` by ``prep_check_adata``. The expression is used as is: any per-gene
+    rescaling cancels exactly in every LRIC ratio, so none is applied.
     """
-    return transform(_to_dense(get_x(adata[:, gene_names])))[:, idx]
+    return _to_dense(get_x(adata[:, gene_names]))[:, idx]
 
 
 def _index_resource(
@@ -132,19 +104,17 @@ def _lr_weights(
     adata: AnnData,
     resource: pd.DataFrame,
     lr_sep: str,
-    transform_fn: Transform | None,
 ) -> tuple[np.ndarray, np.ndarray, list[str], list[str], list[str]]:
     """Per-pair ligand/receptor weight matrices, plus one label per LR pair.
 
     Returns ``(WL, WR, ligands, receptors, pair_names)``, all aligned on the
     LR-pair axis; both weight matrices are ``(n_cells, n_pairs)``.
     """
-    transform = _linear_transform if transform_fn is None else transform_fn
     lr_pairs, unique_ligands, unique_receptors, pair_names = _index_resource(adata, resource, lr_sep)
     if lr_pairs.size == 0:
         raise ValueError("No LR pairs found in adata.var_names after filtering the resource.")
-    WL = _pair_weights(adata, unique_ligands, lr_pairs[:, 0], transform)
-    WR = _pair_weights(adata, unique_receptors, lr_pairs[:, 1], transform)
+    WL = _pair_weights(adata, unique_ligands, lr_pairs[:, 0])
+    WR = _pair_weights(adata, unique_receptors, lr_pairs[:, 1])
     ligands = [unique_ligands[i] for i in lr_pairs[:, 0]]
     receptors = [unique_receptors[j] for j in lr_pairs[:, 1]]
     return WL, WR, ligands, receptors, pair_names
@@ -745,10 +715,8 @@ class LRIC:
         expr_prop: float = V.expr_prop,
         complex_sep: str | None = V.complex_sep,
         lr_sep: str = V.lr_sep,
-        transform_fn: Callable[[np.ndarray], np.ndarray] | None = None,
         use_raw: bool = V.use_raw,
         layer: str | None = V.layer,
-        pair_chunk: int | None = None,
         key_added: str = "lric",
         inplace: bool = V.inplace,
         verbose: bool | None = V.verbose,
@@ -816,18 +784,14 @@ class LRIC:
             the minimum-subunit expression as a new column in ``adata.var``).
             Set to ``None`` to skip complex handling.
         %(lr_sep)s
-        transform_fn
-            Expression transform applied to ligand and receptor matrices,
-            defaulting to mean-normalisation to 1 (``_linear_transform``).
         %(use_raw)s
             Must resolve to non-negative expression; scaled or centred data is
             rejected, as the weights are expression relative to a mean.
         %(layer)s
             Same requirement as ``use_raw``: non-negative expression only.
-        pair_chunk
-            Deprecated since 2.1 and ignored. The weighted numerator is now
-            accumulated without materialising per-chunk temporaries, so there is
-            nothing to tune.
+            Per-gene rescaling cancels in ``g(r)``, so to weight by a nonlinear
+            transform of expression (e.g. ``sqrt``), store it as a layer and
+            pass its name here.
         %(key_added)s
         %(inplace)s
         %(verbose)s
@@ -912,13 +876,6 @@ class LRIC:
 
         assert_covered(np.union1d(resource["ligand"], resource["receptor"]), adata.var_names, verbose=verbose)
 
-        if pair_chunk is not None:
-            warn(
-                f"The argument pair_chunk is deprecated and will be removed in the future. {_PAIR_CHUNK_DEPRECATION}",
-                FutureWarning,
-                stacklevel=2,
-            )
-
         sup = _build_support(adata, spatial_key, max_radius, radius_step, annulus_steps, extend_first_annulus)
         if groupby is None:
             res = self._agnostic(
@@ -927,7 +884,6 @@ class LRIC:
                 sup=sup,
                 nz_prop=nz_prop,
                 lr_sep=lr_sep,
-                transform_fn=transform_fn,
                 verbose=verbose,
             )
         else:
@@ -942,7 +898,6 @@ class LRIC:
                 groupby_pairs=groupby_pairs,
                 expr_prop=expr_prop,
                 lr_sep=lr_sep,
-                transform_fn=transform_fn,
                 verbose=verbose,
             )
 
@@ -958,7 +913,6 @@ class LRIC:
         sup: _Support,
         nz_prop: float,
         lr_sep: str,
-        transform_fn: Transform | None,
         verbose: bool | None,
     ) -> pd.DataFrame:
         """Cell-type-agnostic LRIC across all cells (self-pairs excluded).
@@ -976,7 +930,7 @@ class LRIC:
         """
         _logg("Running cell-type-agnostic LRIC.", verbose=verbose)
 
-        WL, WR, ligands, receptors, pair_names = _lr_weights(adata, resource, lr_sep, transform_fn)
+        WL, WR, ligands, receptors, pair_names = _lr_weights(adata, resource, lr_sep)
 
         # numerator and denominator both come off the SAME edge list on disjoint
         # fine tiles, then get rolled up into the (possibly overlapping) output
@@ -1015,7 +969,6 @@ class LRIC:
         groupby_pairs: pd.DataFrame | None,
         expr_prop: float,
         lr_sep: str,
-        transform_fn: Transform | None,
         verbose: bool | None,
     ) -> pd.DataFrame:
         """Cell-type pairwise ("ct") LRIC under the conditional (within-type) null.
@@ -1059,7 +1012,7 @@ class LRIC:
             verbose=verbose,
         )
 
-        WL, WR, ligands, receptors, pair_names = _lr_weights(adata, resource, lr_sep, transform_fn)
+        WL, WR, ligands, receptors, pair_names = _lr_weights(adata, resource, lr_sep)
         n_lr = len(pair_names)
 
         # per-type marginals: the heart of the conditional null

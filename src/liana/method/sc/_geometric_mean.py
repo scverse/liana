@@ -3,13 +3,13 @@ from numpy.typing import NDArray
 from pandas import DataFrame
 from scipy.stats import gmean
 
-from liana._core._pipe_utils._get_mean_perms import _apply_proximity_weights, _calculate_pvals
+from liana._core._pipe_utils._get_mean_perms import _apply_proximity_weights, _calculate_pvals, _PermStatChunks
 from liana.method.sc._Method import Method, MethodMeta
 
 
 def _gmean_score(
     x: DataFrame,
-    perm_stats: NDArray[np.floating] | None,
+    perm_stats: _PermStatChunks | None,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating] | None]:
     """
     Calculate CellPhoneDB-like LR means and p-values

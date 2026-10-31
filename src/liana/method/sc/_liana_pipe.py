@@ -19,7 +19,13 @@ from liana._core._docs import d
 from liana._core._pipe_utils import assert_covered, filter_resource, prep_check_adata
 from liana._core._pipe_utils._aggregate import _aggregate, _assign_min_or_max
 from liana._core._pipe_utils._common import _get_groupby_subset, _get_props, _join_stats
-from liana._core._pipe_utils._get_mean_perms import Aggregation, _get_mat_idx, _get_means_perms, _trimean
+from liana._core._pipe_utils._get_mean_perms import (
+    Aggregation,
+    _get_mat_idx,
+    _get_means_perms,
+    _PermStatChunks,
+    _trimean,
+)
 from liana._core._pipe_utils._pre import _choose_mtx_rep
 from liana._core._types import get_obs, get_x
 from liana.multisample.mdata_to_anndata import mdata_to_anndata
@@ -683,11 +689,9 @@ def _run_method(
             # get tensor indexes for ligand, receptor, source, target
             ligand_idx, receptor_idx, source_idx, target_idx = _get_mat_idx(adata, lr_res)
 
-            # ligand and receptor perms
-            ligand_stat_perms = perms[:, source_idx, ligand_idx]
-            receptor_stat_perms = perms[:, target_idx, receptor_idx]
-            # stack them together
-            perm_stats = np.stack((ligand_stat_perms, receptor_stat_perms), axis=0)
+            # ligand and receptor perms, gathered one block of permutations at a time
+            # so that peak memory is set by the block size rather than by `n_perms`
+            perm_stats = _PermStatChunks(perms, source_idx, ligand_idx, target_idx, receptor_idx)
         else:
             perm_stats = None
 

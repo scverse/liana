@@ -17,7 +17,6 @@ from liana.datasets._sample_resource import sample_resource
 from liana.method.sp._LRIC import (
     _default_min_cells,
     _index_resource,
-    _linear_transform,
     _make_radii,
     _pair_weights,
     _support_edge_list,
@@ -118,7 +117,7 @@ def cross_pcf_pair(adata: AnnData) -> pd.DataFrame:
 @pytest.fixture(scope="module")
 def lric_agnostic(adata: AnnData, resource: pd.DataFrame) -> pd.DataFrame:
     """Default agnostic LRIC, computed once and shared as the reference the
-    lr_sep / nz_prop / transform_fn variants are each compared against."""
+    lr_sep / nz_prop / layer variants are each compared against."""
     return as_frame(lric(adata, resource=resource, nz_prop=0, inplace=False, **_KWARGS))
 
 
@@ -130,12 +129,6 @@ def lric_pairwise(adata: AnnData, resource: pd.DataFrame) -> pd.DataFrame:
 
 
 # ── helpers: pure math / small synthetic inputs ────────────────────────────
-
-
-def test_linear_transform() -> None:
-    np.testing.assert_almost_equal(_linear_transform(np.array([[2.0, 4.0], [2.0, 4.0]])), np.ones((2, 2)))
-    assert (_linear_transform(np.array([[0.0, 1.0], [1.0, 1.0]])) >= 0).all()
-    assert (_linear_transform(np.zeros((3, 2))) == 0).all()
 
 
 def test_to_dense() -> None:
@@ -192,22 +185,16 @@ def test_index_resource() -> None:
     assert all("|" in n and "^" not in n for n in names_custom)
 
 
-def test_pair_weights_transform_sees_unique_genes() -> None:
-    # transform is applied to the unique-gene matrix, then gathered to per-pair columns
-    a = ad.AnnData(np.arange(12, dtype=np.float32).reshape(3, 4))
+def test_pair_weights_gathers_unique_genes() -> None:
+    # the unique-gene matrix is gathered to per-pair columns, untransformed
+    X = np.arange(12, dtype=np.float32).reshape(3, 4)
+    a = ad.AnnData(X)
     a.var_names = ["g0", "g1", "g2", "g3"]
     idx = np.array([0, 0, 1])  # 3 pairs drawn from 2 unique genes (g0 shared)
 
-    seen = {}
-
-    def tf(x: np.ndarray) -> np.ndarray:
-        seen["n_cols"] = x.shape[1]
-        return x
-
-    out = _pair_weights(a, ["g0", "g1"], idx, tf)
-    assert seen["n_cols"] == 2  # transform saw the 2 unique genes, not 3 gathered cols
+    out = _pair_weights(a, ["g0", "g1"], idx)
     assert out.shape == (3, 3)  # gathered to one column per pair
-    np.testing.assert_array_equal(out[:, 0], out[:, 1])  # shared gene duplicated post-transform
+    np.testing.assert_array_equal(out, X[:, [0, 0, 1]])
 
 
 def test_default_min_cells() -> None:
@@ -442,7 +429,6 @@ def test_lric_agnostic_reduces_to_cross_pcf(adata: AnnData) -> None:
         lric(
             indicator_adata,
             resource=ind_resource,
-            transform_fn=lambda x: x,
             complex_sep=None,
             use_raw=False,
             inplace=False,
@@ -500,17 +486,27 @@ def test_lric_lr_sep(adata: AnnData, resource: pd.DataFrame, lric_agnostic: pd.D
     np.testing.assert_array_equal(custom["ligand_complex"], default["ligand_complex"])
 
 
-def test_lric_agnostic_transform_fn(adata: AnnData, resource: pd.DataFrame, lric_agnostic: pd.DataFrame) -> None:
-    base = lric_agnostic["g"].to_numpy()
+def test_lric_agnostic_layer_weights(adata: AnnData, resource: pd.DataFrame) -> None:
+    X = _to_dense(get_csr(adata))
+    a = adata.copy()
+    a.layers["raw"] = X
+    a.layers["scaled"] = X * np.linspace(0.5, 3.0, X.shape[1], dtype=np.float32)
+    a.layers["sqrt"] = np.sqrt(X)
 
-    # a genuinely nonlinear transform changes the result
-    nonlinear = as_frame(lric(adata, resource=resource, transform_fn=np.sqrt, inplace=False, **_KWARGS))["g"]
+    def run(layer: str) -> np.ndarray:
+        return as_frame(lric(a, resource=resource, layer=layer, nz_prop=0, use_raw=False, inplace=False, **_KWARGS))[
+            "g"
+        ].to_numpy()
+
+    base = run("raw")
+
+    # a per-gene rescaling cancels exactly in the closed-form ratio
+    scaled = run("scaled")
+    np.testing.assert_allclose(scaled, base, rtol=1e-5)
+
+    # a nonlinear transform, passed as a layer, changes the weights and so the result
+    nonlinear = run("sqrt")
     assert not np.allclose(nonlinear, base, equal_nan=True)
-
-    # a pure per-gene rescaling (identity, skipping the default mean-normalisation)
-    # cancels exactly in the closed-form ratio, so the result is scale-invariant
-    identity = as_frame(lric(adata, resource=resource, transform_fn=lambda x: x, inplace=False, **_KWARGS))["g"]
-    np.testing.assert_array_almost_equal(identity, base, decimal=4)
 
 
 def test_lric_agnostic_inplace(adata_copy: AnnData, resource: pd.DataFrame) -> None:
@@ -819,15 +815,12 @@ def test_lric_pairwise_constant_expression_is_one() -> None:
 
 
 def test_lric_negative_layer_raises(adata: AnnData, resource: pd.DataFrame) -> None:
-    # a scaled/centred layer used to run through silently: `_linear_transform` divides by
-    # a per-gene mean that sits near 0, so `g(r)` came out as noise rather than as an
-    # obviously broken number
+    # a scaled/centred layer would otherwise run through silently, with `g(r)` coming out
+    # as noise rather than as an obviously broken number
     scaled = adata.copy()
     scaled.layers["scaled"] = _to_dense(get_csr(scaled)) - 1.0
     with raises(ValueError, match="negative values"):
         lric(scaled, resource=resource, layer="scaled", use_raw=False, inplace=False, **_KWARGS)
-    # the mean == 0 fallback stays: an all-zero gene is legitimate and must not become NaN
-    assert (_linear_transform(np.zeros((3, 2))) == 0).all()
 
 
 def test_lric_no_lr_pairs_raises(adata: AnnData) -> None:
@@ -839,12 +832,3 @@ def test_lric_no_lr_pairs_raises(adata: AnnData) -> None:
         lric(adata, resource=bad, inplace=False, verbose=False)
     with raises(ValueError, match="Please check if appropriate organism/ID type"):
         lric(adata, resource=bad, groupby="cell_type", inplace=False, verbose=False)
-
-
-def test_pair_chunk_is_deprecated(adata: AnnData, resource: pd.DataFrame) -> None:
-    expected = as_frame(lric(adata, resource=resource, inplace=False, **_KWARGS))
-
-    with pytest.warns(FutureWarning, match="argument pair_chunk is deprecated"):
-        got = as_frame(lric(adata, resource=resource, inplace=False, pair_chunk=8, **_KWARGS))
-
-    pd.testing.assert_frame_equal(got, expected)

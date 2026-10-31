@@ -2,7 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pandas import DataFrame
 
-from liana._core._pipe_utils._get_mean_perms import _apply_proximity_weights, _calculate_pvals
+from liana._core._pipe_utils._get_mean_perms import _apply_proximity_weights, _calculate_pvals, _PermStatChunks
 from liana.method.sc._Method import Method, MethodMeta
 
 _KH = 0.5
@@ -22,7 +22,7 @@ def _lr_probability(
 # Internal Function to calculate CellPhoneDB LR_mean and p-values
 def _cellchat_score(
     x: DataFrame,
-    perm_stats: NDArray[np.floating] | None,
+    perm_stats: _PermStatChunks | None,
 ) -> tuple[NDArray[np.floating], NDArray[np.floating] | None]:
     """
     Calculate CellChat-like LR means and p-values
