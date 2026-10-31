@@ -67,7 +67,7 @@ optional-dependencies.tutorials = [
   "liana[extras]",
   "marsilea",
   "matplotlib",
-  "pycrosstalker",
+  "pycrosstalker>=2.1.8",
   "seaborn",
 ]
 # The two heavy notebooks (inflow_mofaflex, liana_c2c): tensor-cell2cell's tensorly

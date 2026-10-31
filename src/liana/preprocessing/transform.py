@@ -80,7 +80,9 @@ def zi_minmax(X: MatrixLike, cutoff: float = 0.5) -> csr_matrix:
 
     scaled_values[scaled_values < cutoff] = 0
 
-    return csr_matrix((scaled_values, (nonzero_rows, nonzero_cols)), shape=mat.shape)
+    out = csr_matrix((scaled_values, (nonzero_rows, nonzero_cols)), shape=mat.shape)
+    out.eliminate_zeros()  # sub-cutoff values are unexpressed, not stored zeros
+    return out
 
 
 def neg_to_zero(X: MatrixLike, cutoff: float = 0) -> csr_matrix:

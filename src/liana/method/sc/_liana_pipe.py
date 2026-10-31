@@ -505,10 +505,10 @@ def _get_lr(
 
     logfc_flag = (M.ligand_logfc in relevant_cols) | (M.receptor_logfc in relevant_cols)
     if logfc_flag:
-        if "log1p" in adata.uns_keys():
+        if "log1p" in adata.uns:
             if (adata.uns["log1p"]["base"] is not None) & bool(verbose):
                 print("Assuming that counts were `natural` log-normalized!")
-        elif ("log1p" not in adata.uns_keys()) & bool(verbose):
+        elif ("log1p" not in adata.uns) & bool(verbose):
             print("Assuming that counts were `natural` log-normalized!")
         # `prep_check_adata` upstream guarantees a csr matrix.
         normcounts = _choose_mtx_rep(adata).copy()

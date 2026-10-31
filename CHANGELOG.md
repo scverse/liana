@@ -12,6 +12,15 @@
 - Permutation-based methods now reject `n_perms` values that are `0`, negative or not integers with a clear `ValueError`; `None` skips permutations.
 - The permutation statistics behind `cellphonedb`, `cellchat`, `geometric_mean` and `rank_aggregate` p-values are gathered and reduced a block of permutations at a time instead of as one `(2, n_perms, n_interactions)` tensor, so their peak memory no longer scales with `n_perms` (#282, by @pwwang). P-values are bit-identical for a given seed. Peak RSS / wall time, `cellphonedb`, MacBook Pro M3, 24 GB: 462k interactions, 1000 permutations 14.7 GB / 27 s -> 1.6 GB / 9 s; 4.2M interactions, 300 permutations 15.2 GB (memory-bound) / 510 s -> 3.7 GB / 35 s. Up to ~15% slower when the whole tensor fits in memory. Internally, the pipeline now owns the permutation test: a permutation-based method only declares how it combines ligand and receptor statistics (`MethodMeta(combine=...)`), plus an optional observed-only adjustment (`observed_fn=`, CellPhoneDB's zero mask), instead of each method re-implementing proximity weighting and p-value counting.
 
+### Fixed
+
+- Explicit zeros stored in a sparse `X` no longer count as expressing cells in `ligand_props`/`receptor_props` (and thus `expr_prop`). `li.pp.zi_minmax` now prunes its sub-cutoff zeros, so with it as `x_transform`/`y_transform` far fewer interactions pass `expr_prop`.
+- MISTy raises if a view's `obs_names` differ from the intra-view's; views were paired by row position, so a reordered view gave silently wrong results.
+- `li.mt.lric`/`li.mt.cross_pcf`: pairs exactly on a radius-tile edge (e.g. gridded spots with `radius_step` equal to the spacing) no longer drift into the neighbouring tile; the number of annuli is `floor(max_radius / radius_step)`, so float steps no longer add a spurious annulus (e.g. 0.3 / 0.1) and `max_radius < radius_step` raises.
+- `li.mt.get_lric_auc` normalises by the radial width it actually integrates, so an empty interior bin no longer pulls the score toward 0.
+- Docs build with `sphinx-autodoc-typehints>=3.17` (the `alias_typehints` shim is removed); README and decision-tree links point to `liana.readthedocs.io` (#283).
+- The pyCrossTalkeR tutorial runs in CI again; the `tutorials` extra requires `pycrosstalker>=2.1.8` (#271).
+
 ## 2.0.0 (31.10.2026)
 
 liana+ now has a new home under the scverse organisation.
