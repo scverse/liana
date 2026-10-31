@@ -130,6 +130,10 @@ class MistyData(MuData):
                         f"view {view} has {current.shape[0]} observations, "
                         + f"but the intra-view has {intra.shape[0]} observations"
                     )
+                if not current.obs_names.equals(intra.obs_names):
+                    raise ValueError(
+                        f"view {view} must have the same `obs_names`, in the same order, as the intra-view."
+                    )
             elif f"{self.spatial_key}_connectivities" not in current.obsm.keys():
                 raise ValueError(f"view {view} does not contain `{self.spatial_key}_connectivities` key in .obsm")
 
