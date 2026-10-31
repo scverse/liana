@@ -208,9 +208,7 @@ def test_default_min_cells() -> None:
 def test_support_edge_list() -> None:
     coords = np.array([[0.0, 0.0], [10.0, 0.0], [20.0, 0.0]])
     tree = cKDTree(coords)
-    radii_inner = np.array([0.0, 15.0])
-    radii_outer = np.array([15.0, 25.0])
-    I, J, bin_idx = _support_edge_list(tree, radii_inner, radii_outer)
+    I, J, bin_idx = _support_edge_list(tree, step=15.0, n_fine=2)
     assert (I != J).all()  # self-pairs excluded
     pairs = set(zip(I.tolist(), J.tolist(), strict=True))
     assert pairs == {(0, 1), (1, 0), (1, 2), (2, 1), (0, 2), (2, 0)}

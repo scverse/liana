@@ -152,17 +152,14 @@ def _make_radii(
     max_radius: float, radius_step: float, annulus_steps: int = 1, extend_first_annulus: bool = True
 ) -> tuple[np.ndarray, np.ndarray]:
     """Inner/outer edges of the output annuli; each is ``annulus_steps`` radius steps wide."""
-    radii_inner = np.arange(radius_step, max_radius + radius_step, radius_step, dtype=float)
+    n = int(np.floor(max_radius / radius_step + 1e-9))  # tolerance: 0.3 / 0.1 must give 3, not 2.9999...
+    if n < 1:
+        raise ValueError(f"`max_radius` ({max_radius}) must be at least `radius_step` ({radius_step}).")
+    radii_inner = radius_step * np.arange(1, n + 1, dtype=float)
     radii_outer = radii_inner + annulus_steps * radius_step
     if extend_first_annulus:
         radii_inner[0] = 0.0  # merge the [0, radius_step) contact band into the first annulus
     return radii_inner, radii_outer
-
-
-def _fine_tiles(n_bins: int, radius_step: float, annulus_steps: int) -> tuple[np.ndarray, np.ndarray]:
-    """Disjoint ``radius_step``-wide tiles from 0 out to the last annulus' outer edge."""
-    fine_inner = np.arange(n_bins + annulus_steps, dtype=float) * radius_step
-    return fine_inner, fine_inner + radius_step
 
 
 def _roll_tiles(fine: np.ndarray, n_bins: int, k: int, extend_first: bool) -> np.ndarray:
@@ -191,27 +188,27 @@ def _bin_edges(
     I: np.ndarray,
     J: np.ndarray,
     D: np.ndarray,
-    radii_inner: np.ndarray,
-    radii_outer: np.ndarray,
+    step: float,
+    n_fine: int,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Drop self-pairs and pairs outside every tile, and bin what is left.
+    """Drop self-pairs and pairs beyond the last tile, and assign the rest to ``[k * step, (k + 1) * step)`` tiles.
+
+    Distances within a relative ``1e-9`` of a tile edge snap to the outer tile, so pairs lying exactly on an edge
+    (e.g. gridded spots with ``step`` equal to the spacing) are not placed by floating-point noise.
 
     One pass over the pair list, counting first and filling second, so that the
     intermediate masks the equivalent chain of numpy expressions would allocate over
     tens of millions of pairs never exist.
     """
-    n_bins = radii_inner.size
     n_edges = I.size
 
     kept = 0
     for e in range(n_edges):
         if I[e] == J[e]:
             continue
-        d = np.float64(D[e])
-        b = 0
-        while b < n_bins and radii_outer[b] <= d:
-            b += 1
-        if b < n_bins and d >= radii_inner[b]:
+        q = D[e] / step
+        b = int(np.floor(q * (1.0 + 1e-9)))
+        if b < n_fine:
             kept += 1
 
     out_i = np.empty(kept, dtype=I.dtype)
@@ -222,11 +219,9 @@ def _bin_edges(
     for e in range(n_edges):
         if I[e] == J[e]:
             continue
-        d = np.float64(D[e])
-        b = 0
-        while b < n_bins and radii_outer[b] <= d:
-            b += 1
-        if b < n_bins and d >= radii_inner[b]:
+        q = D[e] / step
+        b = int(np.floor(q * (1.0 + 1e-9)))
+        if b < n_fine:
             out_i[at] = I[e]
             out_j[at] = J[e]
             out_bin[at] = b
@@ -235,23 +230,11 @@ def _bin_edges(
     return out_i, out_j, out_bin
 
 
-def _support_edge_list(
-    tree: cKDTree, radii_inner: np.ndarray, radii_outer: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Global (i, j, bin) edge list for all ordered pairs within ``radii_outer[-1]``.
+def _support_edge_list(tree: cKDTree, step: float, n_fine: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Global (i, j, tile) edge list for all ordered pairs within ``n_fine * step``, self-pairs excluded."""
+    spdm = tree.sparse_distance_matrix(tree, max_distance=n_fine * step, output_type="coo_matrix")
 
-    Self-pairs are excluded, and pairs are binned on the half-open ``[inner, outer)`` convention.
-    Each pair is assigned to exactly one bin, so the bins must be disjoint tiles for the counts to be complete.
-    """
-    spdm = tree.sparse_distance_matrix(tree, max_distance=float(radii_outer[-1]), output_type="coo_matrix")
-
-    return _bin_edges(
-        spdm.row,
-        spdm.col,
-        spdm.data.astype(np.float32),
-        np.asarray(radii_inner, dtype=np.float64),
-        np.asarray(radii_outer, dtype=np.float64),
-    )
+    return _bin_edges(spdm.row, spdm.col, spdm.data, float(step), int(n_fine))
 
 
 class _Support(NamedTuple):
@@ -279,9 +262,8 @@ def _build_support(
     coords = np.asarray(adata.obsm[spatial_key], dtype=float)
     radii_inner, _ = _make_radii(max_radius, radius_step, annulus_steps, extend_first_annulus)
     n_bins = len(radii_inner)
-    fine_inner, fine_outer = _fine_tiles(n_bins, radius_step, annulus_steps)
-    n_fine = len(fine_inner)
-    I, J, bin_idx = _support_edge_list(cKDTree(coords), fine_inner, fine_outer)
+    n_fine = n_bins + annulus_steps  # disjoint `radius_step`-wide tiles out to the last annulus' outer edge
+    I, J, bin_idx = _support_edge_list(cKDTree(coords), radius_step, n_fine)
     roll = partial(_roll_tiles, n_bins=n_bins, k=annulus_steps, extend_first=extend_first_annulus)
     T = roll(np.bincount(bin_idx, minlength=n_fine).astype(np.float64))
     return _Support(len(coords), radii_inner, I, J, bin_idx, n_fine, T, roll)
@@ -475,7 +457,7 @@ def _type_mean_weights(W: np.ndarray, obs_types: np.ndarray, cell_types_list: li
     """
     out = np.empty((len(cell_types_list), W.shape[1]), dtype=np.float64)
     for ci, ct in enumerate(cell_types_list):
-        out[ci] = W[obs_types == ct].mean(axis=0)
+        out[ci] = W[obs_types == ct].mean(axis=0)  # float32 accumulation; may drift slightly on very large slides
     return out
 
 
@@ -786,7 +768,7 @@ class LRIC:
         %(lr_sep)s
         %(use_raw)s
             Must resolve to non-negative expression; scaled or centred data is
-            rejected, as the weights are expression relative to a mean.
+            rejected, as the weights are the expression levels themselves.
         %(layer)s
             Same requirement as ``use_raw``: non-negative expression only.
             Per-gene rescaling cancels in ``g(r)``, so to weight by a nonlinear
@@ -862,7 +844,7 @@ class LRIC:
             layer=layer,
             obsm={spatial_key: adata.obsm[spatial_key]},
             complex_sep=complex_sep,
-            # the weights are expression relative to a per-gene mean, so negative input is
+            # the weights are the expression itself, so negative input is
             # rejected; the log1p heuristic stays off, as any positive rescaling cancels
             block_negatives=True,
             check_lognorm=False,

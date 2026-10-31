@@ -5,7 +5,7 @@
 ### Removed
 
 - **Breaking: `li.mt.lric(pair_chunk=...)` is removed**, after being deprecated and ignored in 2.0.0.
-- **Breaking: `li.mt.lric(transform_fn=...)` is removed.** Its default, mean-normalising each gene to 1, was a redundant: after introducing analytical normalisation for the area of interest, any per-gene rescaling cancels exactly in every LRIC ratio (`g`, `g_expr`). To weight by a nonlinear transform of expression, store it as a layer and pass it -- e.g. `adata.layers["sqrt"] = adata.X.sqrt()`, then `li.mt.lric(..., layer="sqrt")`. Unlike `transform_fn`, a layer goes through the non-negativity check.
+- **Breaking: `li.mt.lric(transform_fn=...)` is removed.** Its default, mean-normalising each gene to 1, was redundant: after introducing analytical normalisation for the area of interest, any per-gene rescaling cancels exactly in every LRIC ratio (`g`, `g_expr`). To weight by a nonlinear transform of expression, store it as a layer and pass it -- e.g. `adata.layers["sqrt"] = np.sqrt(adata.X)`, then `li.mt.lric(..., layer="sqrt")`. Unlike `transform_fn`, a layer goes through the non-negativity check.
 
 ### Changed
 

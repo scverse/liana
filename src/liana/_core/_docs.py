@@ -290,8 +290,8 @@ contact_bandwidth
 
 _max_radius = """\
 max_radius
-    Inner edge of the last (widest) annulus bin; the outer edge extends
-    to `max_radius + annulus_steps * radius_step`."""
+    Inner edge of the last (widest) annulus bin, rounded down to a multiple of `radius_step`;
+    the outer edge extends to `max_radius + annulus_steps * radius_step`."""
 
 _radius_step = """\
 radius_step

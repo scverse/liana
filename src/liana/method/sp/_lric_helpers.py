@@ -140,9 +140,7 @@ def get_lric_auc(
     seg = keep[:, :-1] & keep[:, 1:]
     Yv = np.where(keep, Y, 0.0)
     area = (0.5 * (Yv[:, :-1] + Yv[:, 1:]) * np.diff(radii) * seg).sum(axis=1)
-    # radii are ascending, so the kept span is between the first and last kept bin
-    lo, hi = radii[np.argmax(keep, axis=1)], radii[::-1][np.argmax(keep[:, ::-1], axis=1)]
-    span = np.where(keep.any(axis=1), hi - lo, 0.0)
+    span = (np.diff(radii) * seg).sum(axis=1)
 
     ok = (keep.sum(axis=1) >= min_bins) & (span > 0)
     if not ok.any():
