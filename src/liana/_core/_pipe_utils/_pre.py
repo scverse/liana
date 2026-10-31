@@ -121,7 +121,7 @@ def prep_check_adata(
     block_negatives
         Reject a matrix carrying negative values. The single-cell methods assume non-negative
         expression -- `sqrt`, `log2` and `gmean` of a negative mean are all `NaN` -- as does
-        `lric`, whose weights are expression relative to a per-gene mean; the bivariate and
+        `lric`, whose weights are the expression itself; the bivariate and
         MISTy methods work on signed data of any scale and leave it `False`.
     check_lognorm
         Whether to also warn when `block_negatives` input does not look log1p-normalised --
@@ -159,6 +159,7 @@ def prep_check_adata(
 
     # kept as a local because `adata.X` re-widens to everything anndata can store
     X = X.astype(np.float32, copy=True)
+    X.eliminate_zeros()  # stored zeros would count as expressing cells in `*_props`
     adata = sc.AnnData(
         X=X,
         obs=get_obs(adata).copy(),

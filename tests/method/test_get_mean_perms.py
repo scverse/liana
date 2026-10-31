@@ -6,7 +6,9 @@ from anndata import AnnData
 from pandas import DataFrame, read_csv
 from tests._helpers import get_obs, get_raw_x, get_x
 
-from liana._core._pipe_utils._get_mean_perms import _get_mat_idx, _get_means_perms
+from liana._core._pipe_utils import _get_mean_perms
+from liana._core._pipe_utils._get_mean_perms import _get_mat_idx, _get_means_perms, _perm_pvals
+from liana.method.sc._cellphonedb import _mean
 
 
 @pytest.fixture
@@ -100,3 +102,33 @@ def test_cellchat_perms(adata: AnnData) -> None:
     expected = perms.sum(axis=0).sum(axis=1)
 
     np.testing.assert_almost_equal(expected, desired, decimal=6)
+
+
+def test_perm_pvals_do_not_depend_on_blocking(
+    adata: AnnData, all_defaults: DataFrame, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Blocked p-values are the same as reducing the whole `(n_perms, n_interactions)` null at once, for any block size."""
+    perms = _get_means_perms(
+        adata=adata, norm_factor=None, aggregation="mean", n_perms=23, seed=1337, n_jobs=1, verbose=False
+    )
+    idx = _get_mat_idx(adata, all_defaults)
+    ligand_idx, receptor_idx, source_idx, target_idx = idx
+    ligand, receptor = perms[:, source_idx, ligand_idx], perms[:, target_idx, receptor_idx]
+    observed = ligand[0]  # any per-interaction reference works; ties are exercised too
+
+    # reference: the whole `(n_perms, n_interactions)` null at once
+    null = _mean(ligand, receptor)
+    expected = (np.greater_equal(null, observed) | np.isclose(null, observed, rtol=1e-6, atol=0.0)).sum(axis=0) / 23
+
+    np.testing.assert_array_equal(_perm_pvals(observed, perms, *idx, _mean), expected)
+
+    # cap so that 5 permutations fit a block: 23 perms -> blocks of 5, 5, 5, 5, 3
+    seen: list[int] = []
+
+    def spy(lig: np.ndarray, rec: np.ndarray) -> np.ndarray:
+        seen.append(lig.shape[0])
+        return _mean(lig, rec)
+
+    monkeypatch.setattr(_get_mean_perms, "_MAX_PERM_STAT_ELEMENTS", 5 * ligand_idx.size)
+    np.testing.assert_array_equal(_perm_pvals(observed, perms, *idx, spy), expected)
+    assert seen == [5, 5, 5, 5, 3]

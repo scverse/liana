@@ -255,7 +255,7 @@ def lrs_to_views(
             + "Please ensure that the sample key is present in both objects."
         )
 
-    if uns_key not in adata.uns_keys():
+    if uns_key not in adata.uns:
         raise ValueError(f"`{uns_key}` not found in `adata.uns`! Please run `li.mt.rank_aggregate.by_sample` first.")
 
     liana_res = adata.uns[uns_key].copy()

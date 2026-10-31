@@ -1,43 +1,26 @@
 import numpy as np
 from numpy.typing import NDArray
-from pandas import DataFrame
-from scipy.stats import gmean
 
-from liana._core._pipe_utils._get_mean_perms import _apply_proximity_weights, _calculate_pvals
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _gmean_score(
-    x: DataFrame,
-    perm_stats: NDArray[np.floating] | None,
-) -> tuple[NDArray[np.floating], NDArray[np.floating] | None]:
+def _gmean(ligand: NDArray[np.floating], receptor: NDArray[np.floating]) -> NDArray[np.floating]:
+    """The geometric mean of the ligand and receptor cluster means.
+
+    The same arithmetic as `scipy.stats.gmean` (bit-identical), without stacking the inputs into a new array.
     """
-    Calculate CellPhoneDB-like LR means and p-values
-
-    Parameters
-    ----------
-    x
-        DataFrame with LIANA results
-    perm_stats
-        Permutation statistics with shape (2 (ligand-receptor), n_perms (number of permutations), n_rows (in lr_res)
-
-    Returns
-    -------
-    A tuple with lr_mean and p-value for x
-    """
-    lr_gmeans = np.asarray(gmean((x["ligand_means"].to_numpy(), x["receptor_means"].to_numpy()), axis=0))
-    weighted = _apply_proximity_weights(lr_gmeans, x)
-
-    gmean_pvals = _calculate_pvals(weighted, perm_stats, gmean)
-
-    return weighted, gmean_pvals
+    dtype = np.result_type(ligand, receptor, 1.0)  # promote before the log, as `scipy.stats.gmean` does
+    with np.errstate(divide="ignore"):  # log(0) = -inf -> exp(-inf) = 0, as in `scipy.stats.gmean`
+        log_sum = np.log(ligand.astype(dtype, copy=False)) + np.log(receptor.astype(dtype, copy=False))
+    return np.asarray(np.exp(log_sum / 2))
 
 
 _geometric_mean = MethodMeta(
     method_name="Geometric Mean",
     complex_cols=["ligand_means", "receptor_means"],
     add_cols=[],
-    fun=_gmean_score,
+    fun=None,
+    combine=_gmean,
     magnitude="lr_gmeans",
     magnitude_ascending=False,
     specificity="gmean_pvals",

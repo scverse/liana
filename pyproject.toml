@@ -67,7 +67,7 @@ optional-dependencies.tutorials = [
   "liana[extras]",
   "marsilea",
   "matplotlib",
-  "pycrosstalker",
+  "pycrosstalker>=2.1.8",
   "seaborn",
 ]
 # The two heavy notebooks (inflow_mofaflex, liana_c2c): tensor-cell2cell's tensorly
@@ -104,10 +104,10 @@ doc = [
   "ipykernel",
   "ipython",
   "myst-nb>=1.1",
-  "scanpydoc>=0.15.4",
+  "scanpydoc>=0.17.5",
   "setuptools",
   "sphinx>=8.1",
-  "sphinx-autodoc-typehints",
+  "sphinx-autodoc-typehints>=3.17",
   "sphinx-book-theme>=1",
   "sphinx-copybutton",
   "sphinx-design",
@@ -162,6 +162,9 @@ envs.hatch-test.overrides.matrix.deps.env-vars = [
 envs.hatch-test.dependency-groups = [ "dev", "test" ]
 
 [tool.uv]
+# botocore caps python-dateutil<3; without this, uv backtracks s3fs (via ome-zarr -> fsspec[s3])
+# to 0.3.5, an sdist that no longer builds. Drop once botocore allows dateutil 3.
+constraint-dependencies = [ "python-dateutil<3" ]
 # inflow_mofaflex.ipynb needs the unreleased 0.2.0 API (terms/priors); PyPI 0.1.2 is incompatible.
 # uv-only override -- keeps published metadata PyPI-clean.
 sources.mofaflex = { git = "https://github.com/bioFAM/mofaflex.git", branch = "main" }
@@ -211,6 +214,10 @@ lint.flake8-tidy-imports.banned-api."matplotlib.pyplot.show".msg = """\
   return the figure instead; showing is the caller's decision\
   """
 lint.pydocstyle.convention = "numpy"
+
+[tool.pyproject-fmt]
+# don't advertise Python versions before CI tests them (anndata/scanpy stop at 3.14 too)
+max_supported_python = "3.14"
 
 [tool.mypy]
 files = [ "src", "tests" ]

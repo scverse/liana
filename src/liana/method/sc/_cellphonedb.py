@@ -2,43 +2,21 @@ import numpy as np
 from numpy.typing import NDArray
 from pandas import DataFrame
 
-from liana._core._pipe_utils._get_mean_perms import _apply_proximity_weights, _calculate_pvals
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _mean(
-    a: NDArray[np.floating] | tuple[NDArray[np.floating], ...],
-    axis: int = 0,
-) -> NDArray[np.floating]:
-    return np.asarray(np.mean(a, axis=axis))
+def _mean(ligand: NDArray[np.floating], receptor: NDArray[np.floating]) -> NDArray[np.floating]:
+    """CellPhoneDB's interaction score: the mean of the ligand and receptor cluster means."""
+    return np.asarray(np.mean((ligand, receptor), axis=0))
 
 
-# Internal Function to calculate CellPhoneDB LR_mean and p-values
-def _cpdb_score(
-    x: DataFrame,
-    perm_stats: NDArray[np.floating] | None,
-) -> tuple[NDArray[np.floating], NDArray[np.floating] | None]:
+def _zero_mask(observed: NDArray[np.floating], x: DataFrame) -> NDArray[np.floating]:
+    """Score an interaction 0 when its ligand or receptor is not expressed at all.
+
+    Applied to the observed score only; a 0 is reached by every permutation, so its p-value is 1.
     """
-    Calculate CellPhoneDB-like LR means and p-values
-
-    Parameters
-    ----------
-    x
-        DataFrame with LIANA results
-    perm_stats
-        Permutation statistics (2 (ligand-receptor), n_perms (number of permutations, n_rows in lr_res)
-
-    Returns
-    -------
-    A tuple with lr_mean and p-value for x
-    """
-    zero_msk = (x["ligand_means"] == 0) | (x["receptor_means"] == 0)
-    lr_means = _mean((x["ligand_means"].to_numpy(), x["receptor_means"].to_numpy()))
-    lr_means[zero_msk] = 0
-    lr_means = _apply_proximity_weights(lr_means, x)
-    cpdb_pvals = _calculate_pvals(lr_means, perm_stats, _mean)
-
-    return lr_means, cpdb_pvals
+    observed[((x["ligand_means"] == 0) | (x["receptor_means"] == 0)).to_numpy()] = 0
+    return observed
 
 
 # Initialize CPDB Meta
@@ -46,7 +24,9 @@ _cellphonedb = MethodMeta(
     method_name="CellPhoneDB",
     complex_cols=["ligand_means", "receptor_means"],
     add_cols=[],
-    fun=_cpdb_score,
+    fun=None,
+    combine=_mean,
+    observed_fn=_zero_mask,
     magnitude="lr_means",
     magnitude_ascending=False,
     specificity="cellphone_pvals",

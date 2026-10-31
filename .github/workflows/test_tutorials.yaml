@@ -23,8 +23,7 @@ jobs:
           - basic_usage.ipynb
           - prior_knowledge.ipynb
           - targeted.ipynb
-          # pycrosstalker >=2 pins `anndata<0.13` and `pandas==2.2.2`, which liana cannot satisfy, and the 1.0.1 that resolves instead no longer ships the `from_liana` reader the notebook calls.
-          # - liana_pyCrossTalkeR.ipynb
+          - liana_pyCrossTalkeR.ipynb
           - mofatalk.ipynb
           - mofacellular.ipynb
           - liana_c2c.ipynb
@@ -52,7 +51,7 @@ jobs:
           fetch-depth: 0
           submodules: true
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: true
           cache-dependency-glob: pyproject.toml

@@ -14,10 +14,10 @@ LIANA+ is a scalable framework that adapts and extends existing methods and know
 
 ## Contributions
 
-We welcome suggestions, ideas, and contributions! Please do not hesitate to contact us, open issues, and check the [contributions guide](https://liana-py.readthedocs.io/en/latest/contributing.html).
+We welcome suggestions, ideas, and contributions! Please do not hesitate to contact us, open issues, and check the [contributions guide](https://liana.readthedocs.io/en/latest/contributing.html).
 
 ## Vignettes
-A set of extensive vignettes can be found in the [LIANA+ documentation](https://liana-py.readthedocs.io/en/latest/).
+A set of extensive vignettes can be found in the [LIANA+ documentation](https://liana.readthedocs.io/en/latest/).
 
 ## Claude Code Skill
 
@@ -83,32 +83,32 @@ flowchart TD
     class TensorExt,TensorMet external;
 
     %% ===== Links (click events) =====
-    click Inflow "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/inflow_score.html"
-    click LRIC "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/LRIC_tutorial.html"
-    click InflowMofa "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/inflow_mofaflex.html"
-    click ScConstr "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/inflow_score.html"
-    click Local "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/bivariate.html"
-    click Global "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/bivariate.html"
-    click MISTy "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/misty.html"
-    click Steady "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/basic_usage.html"
-    click Targeted "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/targeted.html"
-    click CrossTalk "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/liana_pyCrossTalkeR.html"
-    click MOFA "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/mofatalk.html"
-    click Tensor "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/liana_c2c.html"
+    click Inflow "https://liana.readthedocs.io/en/latest/tutorials/notebooks/inflow_score.html"
+    click LRIC "https://liana.readthedocs.io/en/latest/tutorials/notebooks/LRIC_tutorial.html"
+    click InflowMofa "https://liana.readthedocs.io/en/latest/tutorials/notebooks/inflow_mofaflex.html"
+    click ScConstr "https://liana.readthedocs.io/en/latest/tutorials/notebooks/inflow_score.html"
+    click Local "https://liana.readthedocs.io/en/latest/tutorials/notebooks/bivariate.html"
+    click Global "https://liana.readthedocs.io/en/latest/tutorials/notebooks/bivariate.html"
+    click MISTy "https://liana.readthedocs.io/en/latest/tutorials/notebooks/misty.html"
+    click Steady "https://liana.readthedocs.io/en/latest/tutorials/notebooks/basic_usage.html"
+    click Targeted "https://liana.readthedocs.io/en/latest/tutorials/notebooks/targeted.html"
+    click CrossTalk "https://liana.readthedocs.io/en/latest/tutorials/notebooks/liana_pyCrossTalkeR.html"
+    click MOFA "https://liana.readthedocs.io/en/latest/tutorials/notebooks/mofatalk.html"
+    click Tensor "https://liana.readthedocs.io/en/latest/tutorials/notebooks/liana_c2c.html"
     click TensorExt "https://ccc-protocols.readthedocs.io/en/latest/"
     click TensorMet "https://earmingol.github.io/cell2cell/tutorials/Version2/Tensor-cell2cell-CTCA-LIANA/"
-    click SMA "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/sma.html"
-    click SCMulti "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/sc_multi.html"
-    click Metab "https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/sc_multi.html#metabolite-mediated-ccc-from-transcriptomics-data"
+    click SMA "https://liana.readthedocs.io/en/latest/tutorials/notebooks/sma.html"
+    click SCMulti "https://liana.readthedocs.io/en/latest/tutorials/notebooks/sc_multi.html"
+    click Metab "https://liana.readthedocs.io/en/latest/tutorials/notebooks/sc_multi.html#metabolite-mediated-ccc-from-transcriptomics-data"
 ```
 
 <!-- decision-tree-end -->
 
-This tree is a guide rather than an exhaustive map: the methods are modular and can be adapted or combined across data types and questions, and all of them typically build on curated prior knowledge (see the [prior knowledge](https://liana-py.readthedocs.io/en/latest/tutorials/notebooks/prior_knowledge.html) tutorial for working with ligand–receptor and other resources).
+This tree is a guide rather than an exhaustive map: the methods are modular and can be adapted or combined across data types and questions, and all of them typically build on curated prior knowledge (see the [prior knowledge](https://liana.readthedocs.io/en/latest/tutorials/notebooks/prior_knowledge.html) tutorial for working with ligand–receptor and other resources).
 
 
 ## API
-For further information please check LIANA's [API documentation](https://liana-py.readthedocs.io/en/latest/api.html).
+For further information please check LIANA's [API documentation](https://liana.readthedocs.io/en/latest/api.html).
 
 ## Cite LIANA+:
 
@@ -146,7 +146,7 @@ Please also consider citing any of the methods and/or resources that were partic
 [scverse discourse]: https://discourse.scverse.org/
 [issue tracker]: https://github.com/scverse/liana/issues
 [tests]: https://github.com/scverse/liana/actions/workflows/test.yaml
-[documentation]: https://liana-py.readthedocs.io
-[changelog]: https://liana-py.readthedocs.io/en/latest/changelog.html
-[api documentation]: https://liana-py.readthedocs.io/en/latest/api.html
+[documentation]: https://liana.readthedocs.io
+[changelog]: https://liana.readthedocs.io/en/latest/changelog.html
+[api documentation]: https://liana.readthedocs.io/en/latest/api.html
 [pypi]: https://pypi.org/project/liana

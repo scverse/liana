@@ -24,14 +24,6 @@ else:
     prange = nb.prange
 
 
-type _AggFn = Callable[..., NDArray[np.floating]]
-"""Aggregates a matrix along an ``axis``, e.g. :func:`numpy.mean`.
-
-Spelled with `...` parameters because the callables passed here include numpy
-ufunc-style overloads that no single explicit signature matches structurally;
-the return type is what callers rely on.
-"""
-
 type Aggregation = Literal["mean", "trimean"]
 """The location estimate a permutation-based method builds its null from."""
 
@@ -43,6 +35,9 @@ An order of magnitude above the resolution of the `float32` the scores are store
 
 _MAX_PERM_INDEX_ELEMENTS = 1 << 24
 """Cap on how many row positions one block of permutations may hold, so that peak memory does not scale with ``n_perms``."""
+
+_MAX_PERM_STAT_ELEMENTS = 1 << 23
+"""Cap on how many interaction positions one block of permutation statistics may hold, so that peak memory does not scale with ``n_perms``."""
 
 
 def _trimean(a: CSBase, axis: int = 0) -> NDArray[np.floating]:
@@ -364,49 +359,47 @@ def _get_mat_idx(
     return ligand_idx, receptor_idx, source_idx, target_idx
 
 
-def _calculate_pvals(
-    lr_truth: NDArray[np.floating],
-    perm_stats: NDArray[np.floating] | None,
-    _score_fn: _AggFn,
-) -> NDArray[np.floating] | None:
-    """
-    Calculate p-values for a given DataFrame x and permutation statistics
+type Combine = Callable[[NDArray[np.floating], NDArray[np.floating]], NDArray[np.floating]]
+"""Combines a ligand and a receptor statistic into one interaction score, elementwise."""
+
+
+def _perm_pvals(
+    observed: NDArray[np.floating],
+    perms: NDArray[np.floating],
+    ligand_idx: NDArray[np.integer],
+    receptor_idx: NDArray[np.integer],
+    source_idx: NDArray[np.integer],
+    target_idx: NDArray[np.integer],
+    combine: Combine,
+) -> NDArray[np.floating]:
+    """Permutation p-values: the fraction of permuted scores that reach the observed one.
 
     Parameters
     ----------
-    lr_truth
-        Observed LR scores, shape (n_interactions,). Already proximity-weighted when the
-        caller asked for spatial weighting.
-    perm_stats
-        Permutation statistics, shape (2, n_perms, n_interactions)
-    _score_fn
-        Function to combine ligand and receptor statistics
+    observed
+        Observed interaction scores, shape ``(n_interactions,)``; already proximity-weighted
+        when the caller asked for spatial weighting.
+    perms
+        Permuted per-cluster aggregates, shape ``(n_perms, n_labels, n_genes)``.
+    ligand_idx, receptor_idx, source_idx, target_idx
+        Each interaction's position in ``perms``, from :func:`_get_mat_idx`.
+    combine
+        The method's scoring function, applied to the permuted ligand and receptor statistics.
 
     Returns
     -------
-    P-values for the observed scores
+    P-values for the observed scores.
     """
-    if perm_stats is None:
-        return None
-
-    lr_perm_means = _score_fn(perm_stats, axis=0)
-    n_perms = perm_stats.shape[1]
-
-    exceeds = np.greater_equal(lr_perm_means, lr_truth) | np.isclose(lr_perm_means, lr_truth, rtol=_TIE_RTOL, atol=0.0)
-
-    return np.asarray(np.sum(exceeds, axis=0) / n_perms)
-
-
-def _apply_proximity_weights(
-    observed_scores: NDArray[np.floating],
-    x: pd.DataFrame,
-) -> NDArray[np.floating]:
-    """Scale observed interaction scores by spatial proximity, where it was computed.
-
-    Only the observed statistic is weighted.
-    Weighting the permuted null by the same factor would cancel out of the comparison ``perm * w >= obs * w`` and leave every p-value unchanged, which is what made spatial weighting a no-op for the permutation-based methods.
-    Down-weighting only the observed side is what makes a distant pair need a correspondingly stronger expression signal to clear the null.
-    """
-    if "proximity" not in x.columns:
-        return observed_scores
-    return observed_scores * np.asarray(x["proximity"].to_numpy())
+    n_perms = perms.shape[0]
+    # The ``(n_perms, n_interactions)`` null is gathered a block of permutations at a time, so
+    # peak memory is set by the block size rather than by ``n_perms``. The comparison and the
+    # count are elementwise in the permutations, so the p-values do not depend on the blocking.
+    step = max(1, _MAX_PERM_STAT_ELEMENTS // max(1, ligand_idx.size))
+    exceeds = np.zeros(observed.shape, dtype=np.int64)
+    for start in range(0, n_perms, step):
+        block = perms[start : start + step]
+        null = combine(block[:, source_idx, ligand_idx], block[:, target_idx, receptor_idx])
+        hit = np.greater_equal(null, observed)
+        hit |= np.isclose(null, observed, rtol=_TIE_RTOL, atol=0.0)
+        exceeds += hit.sum(axis=0)
+    return np.asarray(exceeds / n_perms)
