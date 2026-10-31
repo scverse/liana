@@ -9,7 +9,8 @@
 
 ### Changed
 
-- The permutation statistics behind `cellphonedb`, `cellchat`, `geometric_mean` and `rank_aggregate` p-values are gathered and reduced a block of permutations at a time instead of as one `(2, n_perms, n_interactions)` tensor, so their peak memory no longer scales with `n_perms` (#282, by @pwwang). P-values are bit-identical for a given seed (6.35 GB to 1.64 GB peak on 450k interactions x 300 permutations).
+- Permutation-based methods now reject `n_perms` values that are `0`, negative or not integers with a clear `ValueError`; `None` skips permutations.
+- The permutation statistics behind `cellphonedb`, `cellchat`, `geometric_mean` and `rank_aggregate` p-values are gathered and reduced a block of permutations at a time instead of as one `(2, n_perms, n_interactions)` tensor, so their peak memory no longer scales with `n_perms` (#282, by @pwwang). P-values are bit-identical for a given seed. Peak RSS / wall time, `cellphonedb`, MacBook Pro M3, 24 GB: 462k interactions, 1000 permutations 14.7 GB / 27 s -> 1.6 GB / 9 s; 4.2M interactions, 300 permutations 15.2 GB (memory-bound) / 510 s -> 3.7 GB / 35 s. Up to ~15% slower when the whole tensor fits in memory. Internally, the pipeline now owns the permutation test: a permutation-based method only declares how it combines ligand and receptor statistics (`MethodMeta(combine=...)`), plus an optional observed-only adjustment (`observed_fn=`, CellPhoneDB's zero mask), instead of each method re-implementing proximity weighting and p-value counting.
 
 ## 2.0.0 (31.10.2026)
 

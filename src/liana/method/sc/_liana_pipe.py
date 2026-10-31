@@ -23,7 +23,7 @@ from liana._core._pipe_utils._get_mean_perms import (
     Aggregation,
     _get_mat_idx,
     _get_means_perms,
-    _PermStatChunks,
+    _perm_pvals,
     _trimean,
 )
 from liana._core._pipe_utils._pre import _choose_mtx_rep
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from liana._core._types import MatrixLike
-    from liana.method.sc._Method import MethodMeta
+    from liana.method.sc._Method import MethodMeta, ScoreValues
     from liana.method.sc._rank_aggregate import AggregateClass
 
 
@@ -281,6 +281,8 @@ def liana_pipe(
     -------
     A DataFrame with ligand-receptor results
     """
+    if score is not None and score.permute:
+        n_perms = _check_n_perms(n_perms)
     complex_cols = score.complex_cols if score is not None else [C.ligand_means, C.receptor_means]
     add_cols = (score.add_cols if score is not None else M.get_all_values()) + _SUBUNIT_COLS + (supp_columns or [])
 
@@ -400,6 +402,8 @@ def liana_pipe_consensus(
     A DataFrame of aggregated ligand-receptor results, or -- when `consensus_opts` is
     `False` -- a DataFrame per method, keyed by method name.
     """
+    if any(method.permute for method in consensus.methods):
+        n_perms = _check_n_perms(n_perms)
     add_cols = consensus.add_cols + _SUBUNIT_COLS + (supp_columns or [])
 
     adata, lr_res = _prepare_lr_stats(
@@ -602,6 +606,15 @@ def _calc_log2fc(adata: AnnData, label: str) -> np.ndarray:
     return np.asarray(subj_log2means - loso_log2means)
 
 
+def _check_n_perms(n_perms: object) -> int | None:
+    """Validate a permutation count as a Python `int` (numpy ints would overflow downstream); `None` skips them."""
+    if n_perms is None:
+        return None
+    if isinstance(n_perms, bool | np.bool_) or not isinstance(n_perms, int | np.integer) or n_perms < 1:
+        raise ValueError(f"`n_perms` must be a positive integer, or None to skip permutations; got {n_perms!r}.")
+    return int(n_perms)
+
+
 def _expm1_base(X: np.ndarray, base: float) -> np.ndarray:
     """Invert a ``log1p``-in-``base`` transform, i.e. ``base ** X - 1``.
 
@@ -671,11 +684,20 @@ def _run_method(
         norm_factor = None
         aggregation = "mean"
 
-    if _score.fun is None:
-        raise ValueError(f"`{_score.method_name}` has no scoring function.")
-
     if _score.permute:
-        # get permutations
+        if _score.combine is None:
+            raise ValueError(f"`{_score.method_name}` has no `combine` function to score permutations with.")
+        ligand_col, receptor_col = _complex_cols
+        observed = _score.combine(lr_res[ligand_col].to_numpy(), lr_res[receptor_col].to_numpy())
+        if _score.observed_fn is not None:
+            observed = _score.observed_fn(observed, lr_res)
+        # Only the observed side is weighted: weighting the null by the same factor would cancel
+        # out of `null * w >= observed * w` and leave every p-value unchanged. Down-weighting the
+        # observed score is what makes a distant pair need a stronger expression signal.
+        if proximity_weights is not None:
+            observed = observed * proximity_weights
+
+        pvals = None
         if n_perms is not None:
             perms = _get_means_perms(
                 adata=adata,
@@ -686,17 +708,13 @@ def _run_method(
                 n_jobs=n_jobs,
                 verbose=verbose,
             )
-            # get tensor indexes for ligand, receptor, source, target
             ligand_idx, receptor_idx, source_idx, target_idx = _get_mat_idx(adata, lr_res)
+            pvals = _perm_pvals(observed, perms, ligand_idx, receptor_idx, source_idx, target_idx, _score.combine)
 
-            # ligand and receptor perms, gathered one block of permutations at a time
-            # so that peak memory is set by the block size rather than by `n_perms`
-            perm_stats = _PermStatChunks(perms, source_idx, ligand_idx, target_idx, receptor_idx)
-        else:
-            perm_stats = None
-
-        scores = _score.fun(x=lr_res, perm_stats=perm_stats)
+        scores: tuple[ScoreValues | None, ScoreValues | None] = (observed, pvals)
     else:  # non-perm funs
+        if _score.fun is None:
+            raise ValueError(f"`{_score.method_name}` has no scoring function.")
         scores = _score.fun(x=lr_res)
 
         # Apply spatial weighting AFTER scoring for non-permutation methods

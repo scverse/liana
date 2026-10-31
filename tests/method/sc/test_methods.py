@@ -9,7 +9,7 @@ from numpy import isclose, max, min
 from numpy.testing import assert_almost_equal
 from pandas import Categorical, DataFrame
 
-from liana.method import cellchat, cellphonedb, connectome, geometric_mean, logfc, natmi, scseqcomm
+from liana.method import cellchat, cellphonedb, connectome, geometric_mean, logfc, natmi, rank_aggregate, scseqcomm
 from liana.method import singlecellsignalr as sca
 from liana.method.sc._liana_pipe import MdataKwargs
 
@@ -314,3 +314,13 @@ def test_spatial_key_weights_pvals(toy_spatial: AnnData) -> None:
 
     assert not merged["cellphone_pvals_unweighted"].equals(merged["cellphone_pvals_weighted"])
     assert (merged["cellphone_pvals_weighted"] >= merged["cellphone_pvals_unweighted"]).all()
+
+
+@pytest.mark.parametrize("n_perms", [0, -1, 2.5, True])
+def test_invalid_n_perms_raises(toy_adata: AnnData, n_perms: object) -> None:
+    """`None` skips permutations; anything that is not a positive integer is rejected up front."""
+    for method in (cellphonedb, rank_aggregate):
+        with pytest.raises(ValueError, match="`n_perms` must be a positive integer"):
+            method(toy_adata, groupby="bulk_labels", n_perms=n_perms)  # type: ignore[arg-type]
+    natmi(toy_adata, groupby="bulk_labels", n_perms=n_perms)  # type: ignore[arg-type]  # does not permute
+    cellphonedb(toy_adata, groupby="bulk_labels", n_perms=np.int64(3))  # type: ignore[arg-type]

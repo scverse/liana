@@ -15,6 +15,7 @@ from liana._core._constants import DefaultValues as V
 from liana._core._constants import DeMethod
 from liana._core._constants import Keys as K
 from liana._core._docs import d
+from liana._core._pipe_utils._get_mean_perms import Combine
 from liana._core._types import get_obs
 from liana.method.sc._liana_pipe import MdataKwargs, SpatialKwargs, liana_pipe
 
@@ -26,6 +27,9 @@ type ScoreFn = Callable[..., tuple[ScoreValues | None, ScoreValues | None]]
 
 Either element is `None` for a method that reports only one of the two.
 """
+
+type ObservedFn = Callable[[NDArray[np.floating], DataFrame], NDArray[np.floating]]
+"""Adjusts a permutation-based method's observed scores, given the results they belong to."""
 
 
 class MethodMeta:
@@ -41,7 +45,7 @@ class MethodMeta:
     add_cols
         Additional columns required by the method
     fun
-        Interaction Scoring function
+        Interaction scoring function of a method without permutations
     magnitude
         Name of the `magnitude` Score (None if not present)
     magnitude_ascending
@@ -52,6 +56,11 @@ class MethodMeta:
         Whether to rank `magnitude` in ascending manner  (None if not relevant)
     permute
         Whether it requires permutations
+    combine
+        For a permutation-based method, combines the ligand and receptor statistics
+        (``complex_cols``, in that order) into a score, for the observed and permuted data alike
+    observed_fn
+        For a permutation-based method, an adjustment applied to the observed scores only
     reference
         Publication reference in Harvard style
 
@@ -64,7 +73,7 @@ class MethodMeta:
     add_cols
         Additional columns required by the method
     fun
-        Interaction Scoring function
+        Interaction scoring function of a method without permutations
     magnitude
         Name of the `magnitude` Score (None if not present)
     magnitude_ascending
@@ -75,6 +84,11 @@ class MethodMeta:
         Whether to rank `magnitude` in ascending manner  (None if not relevant)
     permute
         Whether it requires permutations
+    combine
+        For a permutation-based method, combines the ligand and receptor statistics
+        (``complex_cols``, in that order) into a score, for the observed and permuted data alike
+    observed_fn
+        For a permutation-based method, an adjustment applied to the observed scores only
     reference
         Publication reference in Harvard style
     """
@@ -94,6 +108,8 @@ class MethodMeta:
         specificity_ascending: bool | None,
         permute: bool,
         reference: str,
+        combine: Combine | None = None,
+        observed_fn: ObservedFn | None = None,
     ):
         self.method_name = method_name
         self.complex_cols = complex_cols
@@ -105,6 +121,8 @@ class MethodMeta:
         self.specificity_ascending = specificity_ascending
         self.permute = permute
         self.reference = reference
+        self.combine = combine
+        self.observed_fn = observed_fn
 
     def describe(self) -> None:
         """Briefly describes the method"""
@@ -238,6 +256,8 @@ class Method(MethodMeta):
             specificity_ascending=_method.specificity_ascending,
             permute=_method.permute,
             reference=_method.reference,
+            combine=_method.combine,
+            observed_fn=_method.observed_fn,
         )
         self._method = _method
 
