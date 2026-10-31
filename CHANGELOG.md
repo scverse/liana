@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.1.0 (unreleased)
+## 2.1.0 (31.10.2026)
 
 ### Removed
 
