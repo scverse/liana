@@ -78,19 +78,16 @@ If you like scverse® and want to support our mission, please consider making a 
 </div>
 
 ```{toctree}
-:caption: General
+:caption: Getting started
 :hidden:
 :maxdepth: 1
 
 installation
-api
-changelog
-contributing
-references
+Quickstart <tutorials/notebooks/basic_usage>
 ```
 
 ```{toctree}
-:caption: Gallery
+:caption: Guides
 :hidden:
 :maxdepth: 2
 
@@ -98,12 +95,23 @@ tutorials
 ```
 
 ```{toctree}
-:caption: About
+:caption: Reference
 :hidden:
 :maxdepth: 1
 
+api
 about/background
+```
+
+```{toctree}
+:caption: Project
+:hidden:
+:maxdepth: 1
+
+changelog
+contributing
 about/cite
+references
 GitHub <https://github.com/scverse/liana>
 Discourse <https://discourse.scverse.org/>
 ```
