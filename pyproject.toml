@@ -103,7 +103,7 @@ doc = [
   "docutils>=0.8,!=0.18.*,!=0.19.*",
   "ipykernel",
   "ipython",
-  "scverse-doc[full]>=0.3",
+  "scverse-doc[full]>=0.4",
   "setuptools",
   "sphinx>=8.1",
   "sphinx-autodoc-typehints>=3.17",
