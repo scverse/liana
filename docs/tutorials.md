@@ -16,14 +16,13 @@ Click a node to open its tutorial.
 
 The tree is a guide rather than an exhaustive map, since the methods are modular and can be combined across data types and questions.
 
-## Getting started
+## Prior knowledge
 
-How a method is called, and where the prior knowledge it scores comes from.
+Where the prior knowledge the methods score comes from; {doc}`quickstart <tutorials/notebooks/basic_usage>` shows how a method is called.
 
 ```{toctree}
 :maxdepth: 1
 
-tutorials/notebooks/basic_usage.ipynb
 tutorials/notebooks/prior_knowledge.ipynb
 ```
 
