@@ -1,14 +1,18 @@
 import numpy as np
-from numpy import mean
 from numpy.typing import NDArray
-from pandas import DataFrame
 
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _logfc_score(x: DataFrame) -> tuple[None, NDArray[np.floating]]:
-    mean_logfc = mean((x["ligand_logfc"], x["receptor_logfc"]), axis=0)
-    return None, np.asarray(mean_logfc)
+def _logfc_score(
+    ligand: NDArray[np.floating],
+    receptor: NDArray[np.floating],
+    *,
+    ligand_logfc: NDArray[np.floating],
+    receptor_logfc: NDArray[np.floating],
+) -> tuple[None, NDArray[np.floating]]:
+    """The mean of the ligand and receptor log2FC; their means are not used."""
+    return None, (ligand_logfc + receptor_logfc) / 2
 
 
 # Initialize CPDB Meta

@@ -117,7 +117,7 @@ def test_perm_pvals_do_not_depend_on_blocking(
     observed = ligand[0]  # any per-interaction reference works; ties are exercised too
 
     # reference: the whole `(n_perms, n_interactions)` null at once
-    null = _mean(ligand, receptor)
+    null = _mean(ligand, receptor)[0]
     expected = (np.greater_equal(null, observed) | np.isclose(null, observed, rtol=1e-6, atol=0.0)).sum(axis=0) / 23
 
     np.testing.assert_array_equal(_perm_pvals(observed, perms, *idx, _mean), expected)
@@ -125,7 +125,7 @@ def test_perm_pvals_do_not_depend_on_blocking(
     # cap so that 5 permutations fit a block: 23 perms -> blocks of 5, 5, 5, 5, 3
     seen: list[int] = []
 
-    def spy(lig: np.ndarray, rec: np.ndarray) -> np.ndarray:
+    def spy(lig: np.ndarray, rec: np.ndarray) -> tuple[np.ndarray, None]:
         seen.append(lig.shape[0])
         return _mean(lig, rec)
 

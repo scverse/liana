@@ -8,10 +8,10 @@ _KH = 0.5
 
 
 # simplified/resource-generalizable cellchat probability score
-def _lr_probability(ligand: NDArray[np.floating], receptor: NDArray[np.floating]) -> NDArray[np.floating]:
+def _lr_probability(ligand: NDArray[np.floating], receptor: NDArray[np.floating]) -> tuple[NDArray[np.floating], None]:
     """CellChat's interaction probability: a Hill function of the ligand-receptor trimean product."""
-    lr_prob = np.prod((ligand, receptor), axis=0)
-    return np.asarray(lr_prob / (_KH + lr_prob))
+    lr_prob = ligand * receptor
+    return lr_prob / (_KH + lr_prob), None
 
 
 # Initialize CellChat Meta
@@ -19,8 +19,7 @@ _cellchat = MethodMeta(
     method_name="CellChat",
     complex_cols=["ligand_trimean", "receptor_trimean"],
     add_cols=["mat_max"],
-    fun=None,
-    combine=_lr_probability,
+    fun=_lr_probability,
     magnitude="lr_probs",
     magnitude_ascending=False,
     specificity="cellchat_pvals",

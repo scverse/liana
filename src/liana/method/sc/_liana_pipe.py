@@ -684,13 +684,12 @@ def _run_method(
         norm_factor = None
         aggregation = "mean"
 
+    if _score.fun is None:
+        raise ValueError(f"`{_score.method_name}` has no scoring function.")
+    ligand, receptor = (lr_res[col].to_numpy() for col in _complex_cols)
+
     if _score.permute:
-        if _score.combine is None:
-            raise ValueError(f"`{_score.method_name}` has no `combine` function to score permutations with.")
-        ligand_col, receptor_col = _complex_cols
-        observed = _score.combine(lr_res[ligand_col].to_numpy(), lr_res[receptor_col].to_numpy())
-        if _score.observed_fn is not None:
-            observed = _score.observed_fn(observed, lr_res)
+        observed = np.asarray(_score.fun(ligand, receptor)[0])
         # Only the observed side is weighted: weighting the null by the same factor would cancel
         # out of `null * w >= observed * w` and leave every p-value unchanged. Down-weighting the
         # observed score is what makes a distant pair need a stronger expression signal.
@@ -709,13 +708,11 @@ def _run_method(
                 verbose=verbose,
             )
             ligand_idx, receptor_idx, source_idx, target_idx = _get_mat_idx(adata, lr_res)
-            pvals = _perm_pvals(observed, perms, ligand_idx, receptor_idx, source_idx, target_idx, _score.combine)
+            pvals = _perm_pvals(observed, perms, ligand_idx, receptor_idx, source_idx, target_idx, _score.fun)
 
         scores: tuple[ScoreValues | None, ScoreValues | None] = (observed, pvals)
     else:  # non-perm funs
-        if _score.fun is None:
-            raise ValueError(f"`{_score.method_name}` has no scoring function.")
-        scores = _score.fun(x=lr_res)
+        scores = _score.fun(ligand, receptor, **{col: lr_res[col].to_numpy() for col in _score.add_cols})
 
         # Apply spatial weighting AFTER scoring for non-permutation methods
         if proximity_weights is not None:

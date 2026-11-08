@@ -4,7 +4,7 @@ from numpy.typing import NDArray
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _gmean(ligand: NDArray[np.floating], receptor: NDArray[np.floating]) -> NDArray[np.floating]:
+def _gmean(ligand: NDArray[np.floating], receptor: NDArray[np.floating]) -> tuple[NDArray[np.floating], None]:
     """The geometric mean of the ligand and receptor cluster means.
 
     The same arithmetic as `scipy.stats.gmean` (bit-identical), without stacking the inputs into a new array.
@@ -12,15 +12,14 @@ def _gmean(ligand: NDArray[np.floating], receptor: NDArray[np.floating]) -> NDAr
     dtype = np.result_type(ligand, receptor, 1.0)  # promote before the log, as `scipy.stats.gmean` does
     with np.errstate(divide="ignore"):  # log(0) = -inf -> exp(-inf) = 0, as in `scipy.stats.gmean`
         log_sum = np.log(ligand.astype(dtype, copy=False)) + np.log(receptor.astype(dtype, copy=False))
-    return np.asarray(np.exp(log_sum / 2))
+    return np.exp(log_sum / 2), None
 
 
 _geometric_mean = MethodMeta(
     method_name="Geometric Mean",
     complex_cols=["ligand_means", "receptor_means"],
     add_cols=[],
-    fun=None,
-    combine=_gmean,
+    fun=_gmean,
     magnitude="lr_gmeans",
     magnitude_ascending=False,
     specificity="gmean_pvals",

@@ -7,7 +7,7 @@ import anndata as an
 import numpy as np
 from mudata import MuData
 from numpy.typing import NDArray
-from pandas import DataFrame, Series, concat
+from pandas import DataFrame, concat
 from tqdm import tqdm
 
 from liana._core._common import _logg
@@ -15,21 +15,22 @@ from liana._core._constants import DefaultValues as V
 from liana._core._constants import DeMethod
 from liana._core._constants import Keys as K
 from liana._core._docs import d
-from liana._core._pipe_utils._get_mean_perms import Combine
 from liana._core._types import get_obs
 from liana.method.sc._liana_pipe import MdataKwargs, SpatialKwargs, liana_pipe
 
-type ScoreValues = NDArray[np.floating] | Series
+type ScoreValues = NDArray[np.floating]
 """One column of scores, as a method's scoring function returns it."""
 
 type ScoreFn = Callable[..., tuple[ScoreValues | None, ScoreValues | None]]
-"""Turns ligand/receptor statistics into a (magnitude, specificity) pair.
+"""Scores interactions as ``fun(ligand, receptor, **add_cols) -> (magnitude, specificity)``.
 
-Either element is `None` for a method that reports only one of the two.
+``ligand`` and ``receptor`` are the method's ``complex_cols``, as arrays. A method without
+permutations also receives its ``add_cols`` as keyword arrays; a permutation-based method
+receives only ``ligand`` and ``receptor`` -- the only statistics that are permuted -- and is
+applied elementwise to the observed and the permuted statistics alike, returning
+``(score, None)``: its specificity is the permutation p-value. Either element is `None` for a
+method that reports only one of the two.
 """
-
-type ObservedFn = Callable[[NDArray[np.floating], DataFrame], NDArray[np.floating]]
-"""Adjusts a permutation-based method's observed scores, given the results they belong to."""
 
 
 class MethodMeta:
@@ -45,7 +46,7 @@ class MethodMeta:
     add_cols
         Additional columns required by the method
     fun
-        Interaction scoring function of a method without permutations
+        Interaction scoring function, see `ScoreFn`
     magnitude
         Name of the `magnitude` Score (None if not present)
     magnitude_ascending
@@ -56,11 +57,6 @@ class MethodMeta:
         Whether to rank `magnitude` in ascending manner  (None if not relevant)
     permute
         Whether it requires permutations
-    combine
-        For a permutation-based method, combines the ligand and receptor statistics
-        (``complex_cols``, in that order) into a score, for the observed and permuted data alike
-    observed_fn
-        For a permutation-based method, an adjustment applied to the observed scores only
     reference
         Publication reference in Harvard style
 
@@ -73,7 +69,7 @@ class MethodMeta:
     add_cols
         Additional columns required by the method
     fun
-        Interaction scoring function of a method without permutations
+        Interaction scoring function, see `ScoreFn`
     magnitude
         Name of the `magnitude` Score (None if not present)
     magnitude_ascending
@@ -84,11 +80,6 @@ class MethodMeta:
         Whether to rank `magnitude` in ascending manner  (None if not relevant)
     permute
         Whether it requires permutations
-    combine
-        For a permutation-based method, combines the ligand and receptor statistics
-        (``complex_cols``, in that order) into a score, for the observed and permuted data alike
-    observed_fn
-        For a permutation-based method, an adjustment applied to the observed scores only
     reference
         Publication reference in Harvard style
     """
@@ -108,8 +99,6 @@ class MethodMeta:
         specificity_ascending: bool | None,
         permute: bool,
         reference: str,
-        combine: Combine | None = None,
-        observed_fn: ObservedFn | None = None,
     ):
         self.method_name = method_name
         self.complex_cols = complex_cols
@@ -121,8 +110,6 @@ class MethodMeta:
         self.specificity_ascending = specificity_ascending
         self.permute = permute
         self.reference = reference
-        self.combine = combine
-        self.observed_fn = observed_fn
 
     def describe(self) -> None:
         """Briefly describes the method"""
@@ -256,8 +243,6 @@ class Method(MethodMeta):
             specificity_ascending=_method.specificity_ascending,
             permute=_method.permute,
             reference=_method.reference,
-            combine=_method.combine,
-            observed_fn=_method.observed_fn,
         )
         self._method = _method
 

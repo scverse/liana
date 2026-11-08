@@ -1,26 +1,18 @@
 import numpy as np
-from pandas import DataFrame, Series
+from numpy.typing import NDArray
 
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _inter_score(x: DataFrame) -> tuple[Series, None]:
-    """
-    Computes the element-wise minimum between pairs of ligand-receptor CDF
-
-    Parameters
-    ----------
-    x
-        DataFrame containing the ligand and receptor CDF
-
-    Returns
-    -------
-    inter_score
-        Pair-wise minimum CDF
-    None
-    """
-    inter_score = np.minimum(x["ligand_cdf"], x["receptor_cdf"])
-    return Series(inter_score, index=x.index), None
+def _inter_score(
+    ligand: NDArray[np.floating],
+    receptor: NDArray[np.floating],
+    *,
+    ligand_cdf: NDArray[np.floating],
+    receptor_cdf: NDArray[np.floating],
+) -> tuple[NDArray[np.floating], None]:
+    """ScSeqComm's inter score: the elementwise minimum of the ligand and receptor CDFs; their means are not used."""
+    return np.minimum(ligand_cdf, receptor_cdf), None
 
 
 _scseqcomm = MethodMeta(
