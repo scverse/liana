@@ -1,33 +1,16 @@
+from collections.abc import Mapping
+
 import numpy as np
-from numpy import mean
 from numpy.typing import NDArray
-from pandas import DataFrame
 
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _connectome_score(x: DataFrame) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
-    """
-    Calculate Connectome-like Score
-
-    Parameters
-    ----------
-    x
-        DataFrame
-
-    Returns
-    -------
-    tuple(expr_prod, scaled_weight)
-    """
-    # magnitude
-    expr_prod = x["ligand_means"].to_numpy() * x["receptor_means"].to_numpy()
-
-    # specificity
-    scaled_weight = mean((x["ligand_zscores"].to_numpy(), x["receptor_zscores"].to_numpy()), axis=0)
-    return np.asarray(expr_prod), np.asarray(scaled_weight)
+def _connectome_score(x: Mapping[str, NDArray[np.floating]]) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
+    """Connectome: `expr_prod` = ligand-receptor product; `scaled_weight` = mean of their z-scores."""
+    return x["ligand_means"] * x["receptor_means"], (x["ligand_zscores"] + x["receptor_zscores"]) / 2
 
 
-# Initialize CPDB Meta
 _connectome = MethodMeta(
     method_name="Connectome",
     complex_cols=["ligand_means", "receptor_means"],

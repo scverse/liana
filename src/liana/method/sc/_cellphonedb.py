@@ -1,32 +1,29 @@
+from collections.abc import Mapping
+
 import numpy as np
 from numpy.typing import NDArray
-from pandas import DataFrame
 
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _mean(ligand: NDArray[np.floating], receptor: NDArray[np.floating]) -> NDArray[np.floating]:
-    """CellPhoneDB's interaction score: the mean of the ligand and receptor cluster means."""
-    return np.asarray(np.mean((ligand, receptor), axis=0))
+def _cellphonedb_score(x: Mapping[str, NDArray[np.floating]]) -> tuple[NDArray[np.floating], None]:
+    """CellPhoneDB: `lr_means` = mean of the ligand and receptor means.
 
-
-def _zero_mask(observed: NDArray[np.floating], x: DataFrame) -> NDArray[np.floating]:
-    """Score an interaction 0 when its ligand or receptor is not expressed at all.
-
-    Applied to the observed score only; a 0 is reached by every permutation, so its p-value is 1.
+    As in CellPhoneDB, an interaction scores 0 when its ligand or receptor is not expressed,
+    in the observed and the permuted data alike.
     """
-    observed[((x["ligand_means"] == 0) | (x["receptor_means"] == 0)).to_numpy()] = 0
-    return observed
+    ligand, receptor = x["ligand_means"], x["receptor_means"]
+    score = ligand + receptor
+    score /= 2
+    score[(ligand == 0) | (receptor == 0)] = 0
+    return score, None
 
 
-# Initialize CPDB Meta
 _cellphonedb = MethodMeta(
     method_name="CellPhoneDB",
     complex_cols=["ligand_means", "receptor_means"],
     add_cols=[],
-    fun=None,
-    combine=_mean,
-    observed_fn=_zero_mask,
+    fun=_cellphonedb_score,
     magnitude="lr_means",
     magnitude_ascending=False,
     specificity="cellphone_pvals",

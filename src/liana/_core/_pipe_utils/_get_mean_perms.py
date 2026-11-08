@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Literal
 
@@ -15,6 +15,8 @@ from tqdm import tqdm
 from liana._core._types import get_obs, get_x
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from anndata import AnnData
 
     prange = range
@@ -359,10 +361,6 @@ def _get_mat_idx(
     return ligand_idx, receptor_idx, source_idx, target_idx
 
 
-type Combine = Callable[[NDArray[np.floating], NDArray[np.floating]], NDArray[np.floating]]
-"""Combines a ligand and a receptor statistic into one interaction score, elementwise."""
-
-
 def _perm_pvals(
     observed: NDArray[np.floating],
     perms: NDArray[np.floating],
@@ -370,7 +368,7 @@ def _perm_pvals(
     receptor_idx: NDArray[np.integer],
     source_idx: NDArray[np.integer],
     target_idx: NDArray[np.integer],
-    combine: Combine,
+    score: Callable[[NDArray[np.floating], NDArray[np.floating]], NDArray[np.floating]],
 ) -> NDArray[np.floating]:
     """Permutation p-values: the fraction of permuted scores that reach the observed one.
 
@@ -383,8 +381,8 @@ def _perm_pvals(
         Permuted per-cluster aggregates, shape ``(n_perms, n_labels, n_genes)``.
     ligand_idx, receptor_idx, source_idx, target_idx
         Each interaction's position in ``perms``, from :func:`_get_mat_idx`.
-    combine
-        The method's scoring function, applied to the permuted ligand and receptor statistics.
+    score
+        Scores ligand and receptor statistics elementwise; applied to each block of permutations to give the null.
 
     Returns
     -------
@@ -398,7 +396,7 @@ def _perm_pvals(
     exceeds = np.zeros(observed.shape, dtype=np.int64)
     for start in range(0, n_perms, step):
         block = perms[start : start + step]
-        null = combine(block[:, source_idx, ligand_idx], block[:, target_idx, receptor_idx])
+        null = score(block[:, source_idx, ligand_idx], block[:, target_idx, receptor_idx])
         hit = np.greater_equal(null, observed)
         hit |= np.isclose(null, observed, rtol=_TIE_RTOL, atol=0.0)
         exceeds += hit.sum(axis=0)

@@ -36,8 +36,10 @@ from liana.resource.select_resource import _handle_resource
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from numpy.typing import NDArray
+
     from liana._core._types import MatrixLike
-    from liana.method.sc._Method import MethodMeta, ScoreValues
+    from liana.method.sc._Method import MethodMeta
     from liana.method.sc._rank_aggregate import AggregateClass
 
 
@@ -684,13 +686,22 @@ def _run_method(
         norm_factor = None
         aggregation = "mean"
 
+    fun = _score.fun
+    if fun is None:
+        raise ValueError(f"`{_score.method_name}` has no scoring function.")
+    x = {col: lr_res[col].to_numpy() for col in (*_complex_cols, *_score.add_cols)}
+
     if _score.permute:
-        if _score.combine is None:
-            raise ValueError(f"`{_score.method_name}` has no `combine` function to score permutations with.")
         ligand_col, receptor_col = _complex_cols
-        observed = _score.combine(lr_res[ligand_col].to_numpy(), lr_res[receptor_col].to_numpy())
-        if _score.observed_fn is not None:
-            observed = _score.observed_fn(observed, lr_res)
+
+        # only the ligand and receptor statistics are permuted, so they are all a permutation-based method sees
+        def score(ligand: NDArray[np.floating], receptor: NDArray[np.floating]) -> NDArray[np.floating]:
+            magnitude, _ = fun({ligand_col: ligand, receptor_col: receptor})  # specificity = permutation p-value
+            if magnitude is None:
+                raise ValueError(f"`{_score.method_name}` is permutation-based but scores no magnitude.")
+            return magnitude
+
+        observed = score(x[ligand_col], x[receptor_col])
         # Only the observed side is weighted: weighting the null by the same factor would cancel
         # out of `null * w >= observed * w` and leave every p-value unchanged. Down-weighting the
         # observed score is what makes a distant pair need a stronger expression signal.
@@ -709,13 +720,11 @@ def _run_method(
                 verbose=verbose,
             )
             ligand_idx, receptor_idx, source_idx, target_idx = _get_mat_idx(adata, lr_res)
-            pvals = _perm_pvals(observed, perms, ligand_idx, receptor_idx, source_idx, target_idx, _score.combine)
+            pvals = _perm_pvals(observed, perms, ligand_idx, receptor_idx, source_idx, target_idx, score)
 
-        scores: tuple[ScoreValues | None, ScoreValues | None] = (observed, pvals)
+        scores: tuple[NDArray[np.floating] | None, NDArray[np.floating] | None] = (observed, pvals)
     else:  # non-perm funs
-        if _score.fun is None:
-            raise ValueError(f"`{_score.method_name}` has no scoring function.")
-        scores = _score.fun(x=lr_res)
+        scores = fun(x)
 
         # Apply spatial weighting AFTER scoring for non-permutation methods
         if proximity_weights is not None:
