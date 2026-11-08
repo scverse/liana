@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Hashable, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from typing import Literal
 
 import anndata as an
@@ -18,20 +18,6 @@ from liana._core._docs import d
 from liana._core._types import get_obs
 from liana.method.sc._liana_pipe import MdataKwargs, SpatialKwargs, liana_pipe
 
-type ScoreValues = NDArray[np.floating]
-"""One column of scores, as a method's scoring function returns it."""
-
-type ScoreFn = Callable[..., tuple[ScoreValues | None, ScoreValues | None]]
-"""Scores interactions as ``fun(ligand, receptor, **add_cols) -> (magnitude, specificity)``.
-
-``ligand`` and ``receptor`` are the method's ``complex_cols``, as arrays. A method without
-permutations also receives its ``add_cols`` as keyword arrays; a permutation-based method
-receives only ``ligand`` and ``receptor`` -- the only statistics that are permuted -- and is
-applied elementwise to the observed and the permuted statistics alike, returning
-``(score, None)``: its specificity is the permutation p-value. Either element is `None` for a
-method that reports only one of the two.
-"""
-
 
 class MethodMeta:
     """
@@ -46,7 +32,9 @@ class MethodMeta:
     add_cols
         Additional columns required by the method
     fun
-        Interaction scoring function, see `ScoreFn`
+        Interaction scoring function, ``fun(x) -> (magnitude, specificity)``, where ``x`` maps the
+        ``complex_cols`` and ``add_cols`` to arrays. A permutation-based method gets only the
+        ``complex_cols`` (the permuted statistics) and returns ``(score, None)``: its specificity is the p-value.
     magnitude
         Name of the `magnitude` Score (None if not present)
     magnitude_ascending
@@ -69,7 +57,9 @@ class MethodMeta:
     add_cols
         Additional columns required by the method
     fun
-        Interaction scoring function, see `ScoreFn`
+        Interaction scoring function, ``fun(x) -> (magnitude, specificity)``, where ``x`` maps the
+        ``complex_cols`` and ``add_cols`` to arrays. A permutation-based method gets only the
+        ``complex_cols`` (the permuted statistics) and returns ``(score, None)``: its specificity is the p-value.
     magnitude
         Name of the `magnitude` Score (None if not present)
     magnitude_ascending
@@ -92,7 +82,10 @@ class MethodMeta:
         method_name: str,
         complex_cols: list[str],
         add_cols: list[str],
-        fun: ScoreFn | None,
+        fun: Callable[
+            [Mapping[str, NDArray[np.floating]]], tuple[NDArray[np.floating] | None, NDArray[np.floating] | None]
+        ]
+        | None,
         magnitude: str | None,
         magnitude_ascending: bool | None,
         specificity: str | None,

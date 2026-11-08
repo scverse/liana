@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 2.1.1 (08.11.2026)
 
 ### Changed
 
-- `cellphonedb` now applies its zero rule (score 0 if the ligand or receptor mean is 0) to permuted data too, as CellPhoneDB does. Some `cellphone_pvals` of sparse interactions drop; `lr_means` are unchanged. On Kang et al. (2018) at `expr_prop=0`, agreement with CellPhoneDB 5.0.1 improves (p-value Spearman 0.924 -> 0.991); at the default `expr_prop=0.1` it is practically unchanged.
+- `cellphonedb` now applies its zero rule (score 0 if the ligand or receptor mean is 0) to permuted data too, as CellPhoneDB does. Some `cellphone_pvals` of sparse interactions drop; `lr_means` are unchanged. On Kang et al. (2018) at `expr_prop=0`, agreement with CellPhoneDB 5.0.1 improves (p-value Spearman 0.991); at the default `expr_prop=0.1`, significance calls are practically unchanged.
 - Internal: methods score through a single `MethodMeta(fun=...)` with signature `fun(ligand, receptor, **add_cols) -> (magnitude, specificity)`; `combine=` and `observed_fn=` are removed. Other methods' results are unchanged.
 
 ## 2.1.0 (31.10.2026)

@@ -1,25 +1,21 @@
+from collections.abc import Mapping
+
 import numpy as np
 from numpy.typing import NDArray
 
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _inter_score(
-    ligand: NDArray[np.floating],
-    receptor: NDArray[np.floating],
-    *,
-    ligand_cdf: NDArray[np.floating],
-    receptor_cdf: NDArray[np.floating],
-) -> tuple[NDArray[np.floating], None]:
-    """ScSeqComm's inter score: the elementwise minimum of the ligand and receptor CDFs; their means are not used."""
-    return np.minimum(ligand_cdf, receptor_cdf), None
+def _scseqcomm_score(x: Mapping[str, NDArray[np.floating]]) -> tuple[NDArray[np.floating], None]:
+    """`scSeqComm`: `inter_score` = minimum of the ligand and receptor CDFs."""
+    return np.minimum(x["ligand_cdf"], x["receptor_cdf"]), None
 
 
 _scseqcomm = MethodMeta(
     method_name="scSeqComm",
     complex_cols=["ligand_means", "receptor_means"],
     add_cols=["ligand_cdf", "receptor_cdf"],
-    fun=_inter_score,
+    fun=_scseqcomm_score,
     magnitude="inter_score",
     magnitude_ascending=False,
     specificity=None,

@@ -1,26 +1,22 @@
+from collections.abc import Mapping
+
 import numpy as np
 from numpy.typing import NDArray
 
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _sca_score(
-    ligand: NDArray[np.floating],
-    receptor: NDArray[np.floating],
-    *,
-    mat_mean: NDArray[np.floating],
-) -> tuple[NDArray[np.floating], None]:
-    """SingleCellSignalR-like LRscore."""
-    lr_sqrt = np.sqrt(ligand) * np.sqrt(receptor)
-    return lr_sqrt / (lr_sqrt + mat_mean), None
+def _singlecellsignalr_score(x: Mapping[str, NDArray[np.floating]]) -> tuple[NDArray[np.floating], None]:
+    """SingleCellSignalR: `lrscore` = sqrt(L * R) / (sqrt(L * R) + mean expression of the matrix)."""
+    lr_sqrt = np.sqrt(x["ligand_means"]) * np.sqrt(x["receptor_means"])
+    return lr_sqrt / (lr_sqrt + x["mat_mean"]), None
 
 
-# Initialize CPDB Meta
 _singlecellsignalr = MethodMeta(
     method_name="SingleCellSignalR",
     complex_cols=["ligand_means", "receptor_means"],
     add_cols=["mat_mean"],
-    fun=_sca_score,
+    fun=_singlecellsignalr_score,
     magnitude="lrscore",
     magnitude_ascending=False,
     specificity=None,

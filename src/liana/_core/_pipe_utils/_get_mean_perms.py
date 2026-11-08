@@ -15,12 +15,13 @@ from tqdm import tqdm
 from liana._core._types import get_obs, get_x
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from anndata import AnnData
 
     prange = range
 
     from liana._core._types import MatrixLike
-    from liana.method.sc._Method import ScoreFn
 else:
     prange = nb.prange
 
@@ -367,7 +368,7 @@ def _perm_pvals(
     receptor_idx: NDArray[np.integer],
     source_idx: NDArray[np.integer],
     target_idx: NDArray[np.integer],
-    score_fn: ScoreFn,
+    score: Callable[[NDArray[np.floating], NDArray[np.floating]], NDArray[np.floating]],
 ) -> NDArray[np.floating]:
     """Permutation p-values: the fraction of permuted scores that reach the observed one.
 
@@ -380,9 +381,8 @@ def _perm_pvals(
         Permuted per-cluster aggregates, shape ``(n_perms, n_labels, n_genes)``.
     ligand_idx, receptor_idx, source_idx, target_idx
         Each interaction's position in ``perms``, from :func:`_get_mat_idx`.
-    score_fn
-        The method's scoring function; its magnitude, computed from the permuted ligand and
-        receptor statistics, is the null.
+    score
+        Scores ligand and receptor statistics elementwise; applied to each block of permutations to give the null.
 
     Returns
     -------
@@ -396,7 +396,7 @@ def _perm_pvals(
     exceeds = np.zeros(observed.shape, dtype=np.int64)
     for start in range(0, n_perms, step):
         block = perms[start : start + step]
-        null = np.asarray(score_fn(block[:, source_idx, ligand_idx], block[:, target_idx, receptor_idx])[0])
+        null = score(block[:, source_idx, ligand_idx], block[:, target_idx, receptor_idx])
         hit = np.greater_equal(null, observed)
         hit |= np.isclose(null, observed, rtol=_TIE_RTOL, atol=0.0)
         exceeds += hit.sum(axis=0)

@@ -1,21 +1,16 @@
+from collections.abc import Mapping
+
 import numpy as np
 from numpy.typing import NDArray
 
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _connectome_score(
-    ligand: NDArray[np.floating],
-    receptor: NDArray[np.floating],
-    *,
-    ligand_zscores: NDArray[np.floating],
-    receptor_zscores: NDArray[np.floating],
-) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
-    """Connectome-like scores: the ligand-receptor product and the mean of their z-scores."""
-    return ligand * receptor, (ligand_zscores + receptor_zscores) / 2
+def _connectome_score(x: Mapping[str, NDArray[np.floating]]) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
+    """Connectome: `expr_prod` = ligand-receptor product; `scaled_weight` = mean of their z-scores."""
+    return x["ligand_means"] * x["receptor_means"], (x["ligand_zscores"] + x["receptor_zscores"]) / 2
 
 
-# Initialize CPDB Meta
 _connectome = MethodMeta(
     method_name="Connectome",
     complex_cols=["ligand_means", "receptor_means"],

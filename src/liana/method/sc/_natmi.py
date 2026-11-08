@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -5,31 +7,23 @@ from liana._core._common import _logg
 from liana.method.sc._Method import Method, MethodMeta
 
 
-def _natmi_score(
-    ligand: NDArray[np.floating],
-    receptor: NDArray[np.floating],
-    *,
-    ligand_means_sums: NDArray[np.floating],
-    receptor_means_sums: NDArray[np.floating],
-) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
-    # magnitude
+def _natmi_score(x: Mapping[str, NDArray[np.floating]]) -> tuple[NDArray[np.floating], NDArray[np.floating]]:
+    """NATMI: `expr_prod` = ligand-receptor product; `spec_weight` = product of each mean over its sum across labels."""
+    ligand, receptor = x["ligand_means"], x["receptor_means"]
     expr_prod = ligand * receptor
-
-    # specificity
-    spec_weight = (ligand / ligand_means_sums) * (receptor / receptor_means_sums)
+    spec_weight = (ligand / x["ligand_means_sums"]) * (receptor / x["receptor_means_sums"])
     # the normaliser sums over the labels in the run, so a single source or target leaves nothing to normalise against
-    for what, stat, sums in (("ligand", ligand, ligand_means_sums), ("receptor", receptor, receptor_means_sums)):
-        if np.all(stat == sums):
+    for what, side in (("ligand", "source"), ("receptor", "target")):
+        if np.all(x[f"{what}_means"] == x[f"{what}_means_sums"]):
             _logg(
-                f"NATMI's `spec_weight` is 1 for every {what}: only one {'source' if what == 'ligand' else 'target'} "
-                "label is in the run (e.g. a single `groupby_pairs` pair), so specificity cannot be normalised.",
+                f"NATMI's `spec_weight` is 1 for every {what}: only one {side} label is in the run "
+                "(e.g. a single `groupby_pairs` pair), so specificity cannot be normalised.",
                 level="warn",
             )
 
     return expr_prod, spec_weight
 
 
-# Initialize CPDB Meta
 _natmi = MethodMeta(
     method_name="NATMI",
     complex_cols=["ligand_means", "receptor_means"],
