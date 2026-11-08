@@ -17,6 +17,7 @@ LIANA+ is a scalable framework that adapts and extends existing methods and know
 We welcome suggestions, ideas, and contributions! Please do not hesitate to contact us, open issues, and check the [contributions guide](https://liana.readthedocs.io/en/latest/contributing.html).
 
 ## Vignettes
+
 A set of extensive vignettes can be found in the [LIANA+ documentation](https://liana.readthedocs.io/en/latest/).
 
 ## Claude Code Skill
@@ -108,6 +109,7 @@ This tree is a guide rather than an exhaustive map: the methods are modular and 
 
 
 ## API
+
 For further information please check LIANA's [API documentation](https://liana.readthedocs.io/en/latest/api.html).
 
 ## Cite LIANA+:
