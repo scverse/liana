@@ -12,17 +12,17 @@ intermediates only one method computes (`ligand_zscores`, `ligand_logfc`, `ligan
 unless `supp_columns=` asks for them, as with a single method.
 `by_sample` adds a column named after `sample_key`.
 
-| method | magnitude | specificity | lower is better |
-|---|---|---|---|
-| `rank_aggregate` | `magnitude_rank` | `specificity_rank` | both |
-| `cellphonedb` | `lr_means` | `cellphone_pvals` | p-value |
-| `cellchat` | `lr_probs` | `cellchat_pvals` | p-value |
-| `geometric_mean` | `lr_gmeans` | `gmean_pvals` | p-value |
-| `natmi` | `expr_prod` | `spec_weight` | neither |
-| `connectome` | `expr_prod` | `scaled_weight` | neither |
-| `logfc` | none | `lr_logfc` | neither |
-| `singlecellsignalr` | `lrscore` | none | no |
-| `scseqcomm` | `inter_score` | none | no |
+| method              | magnitude        | specificity        | lower is better |
+| ------------------- | ---------------- | ------------------ | --------------- |
+| `rank_aggregate`    | `magnitude_rank` | `specificity_rank` | both            |
+| `cellphonedb`       | `lr_means`       | `cellphone_pvals`  | p-value         |
+| `cellchat`          | `lr_probs`       | `cellchat_pvals`   | p-value         |
+| `geometric_mean`    | `lr_gmeans`      | `gmean_pvals`      | p-value         |
+| `natmi`             | `expr_prod`      | `spec_weight`      | neither         |
+| `connectome`        | `expr_prod`      | `scaled_weight`    | neither         |
+| `logfc`             | none             | `lr_logfc`         | neither         |
+| `singlecellsignalr` | `lrscore`        | none               | no              |
+| `scseqcomm`         | `inter_score`    | none               | no              |
 
 `li.mt.get_method_scores()` returns this as `{score: lower_is_better}`;
 `li.mt.process_scores(liana_res, score_key="magnitude_rank")` applies `-log10` to such scores so

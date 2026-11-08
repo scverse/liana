@@ -52,20 +52,20 @@ liana+ now has a new home under the scverse organisation.
 
 - **`MethodMeta` no longer keeps a registry of every instance ever built.** The class held a list of weak references, appended to in `__init__` and never pruned, only to answer `li.mt.get_method_scores()`: 20 entries for the 9 methods liana ships, since a `Method` and the `MethodMeta` it wraps each registered, growing without bound as methods are constructed, and defining a custom method silently changed the scores reported for the whole process. The scores are known where the methods are defined, so they are read from there. This also drops the import-order constraint `liana/__init__.py` documented.
 
-- **Permutation nulls are built by compiled kernels instead of `joblib`.** Both the mean and the trimean null read the CSR buffers directly, one pass over the non-zeros per permutation, and never materialise a permuted copy of the matrix; the trimean sorts each gene's stored entries rather than densifying the group. On 50k cells x 600 genes x 200 permutations, the mean null goes from 2.8 s to 0.45 s and CellChat's trimean null from 68 s to 4.5 s (8 threads). `n_jobs` previously made the permutations *slower* than serial, because a task per permutation re-pickled the sparse matrix each time. Results are unchanged for the trimean and now depend only on `seed`, never on `n_jobs`; the mean null sums in double precision where it previously inherited scipy's single-precision accumulation.
+- **Permutation nulls are built by compiled kernels instead of `joblib`.** Both the mean and the trimean null read the CSR buffers directly, one pass over the non-zeros per permutation, and never materialise a permuted copy of the matrix; the trimean sorts each gene's stored entries rather than densifying the group. On 50k cells x 600 genes x 200 permutations, the mean null goes from 2.8 s to 0.45 s and CellChat's trimean null from 68 s to 4.5 s (8 threads). `n_jobs` previously made the permutations _slower_ than serial, because a task per permutation re-pickled the sparse matrix each time. Results are unchanged for the trimean and now depend only on `seed`, never on `n_jobs`; the mean null sums in double precision where it previously inherited scipy's single-precision accumulation.
 
 - **A sample carrying a single cluster now yields `p = 1` throughout.** Every permutation leaves that cluster's membership untouched, so it has to score exactly as the observation does, but the observed and permuted sides are accumulated by different routines and the tie did not survive that. Permuted scores within single-precision resolution of the observed one now count as tied. Only reachable where a `sample_key` split, or `min_cells`, leaves one cluster standing; on the toy data this moved 9 of 2115 `by_sample` rows off values that were pure float noise.
 
 - **`liana.pl` plot names follow one convention.** Plot functions are bare nouns, as in `scanpy.pl`, and carry the prefix of the method they belong to when they only apply to it. The old names still resolve, via `scverse_misc.deprecated`, so a type checker flags them and calling one raises a `FutureWarning`:
 
-  | Was | Now |
-  |---|---|
-  | `li.pl.circle_plot` | `li.pl.circle` |
-  | `li.pl.annulus_plot` | `li.pl.annulus` |
-  | `li.pl.lric_divergence_plot` | `li.pl.lric_divergence` |
-  | `li.pl.target_metrics` | `li.pl.misty_target_metrics` |
-  | `li.pl.contributions` | `li.pl.misty_contributions` |
-  | `li.pl.interactions` | `li.pl.misty_interactions` |
+  | Was                          | Now                          |
+  | ---------------------------- | ---------------------------- |
+  | `li.pl.circle_plot`          | `li.pl.circle`               |
+  | `li.pl.annulus_plot`         | `li.pl.annulus`              |
+  | `li.pl.lric_divergence_plot` | `li.pl.lric_divergence`      |
+  | `li.pl.target_metrics`       | `li.pl.misty_target_metrics` |
+  | `li.pl.contributions`        | `li.pl.misty_contributions`  |
+  | `li.pl.interactions`         | `li.pl.misty_interactions`   |
 
 - **`liana_pipe` was split into named stages.** Assembling the ligand-receptor statistics, scoring them and aggregating across methods are now three functions rather than one 261-line one with five underscore-prefixed pseudo-private parameters. The consensus path has its own entry point (`liana_pipe_consensus`), so `liana_pipe` no longer dispatches on `_score.method_name == "Rank_Aggregate"` and always returns a `DataFrame`. Internal only -- `li.mt.*` and `li.mt.rank_aggregate` are unchanged.
 
@@ -79,16 +79,16 @@ liana+ now has a new home under the scverse organisation.
 
 - **Breaking: the public namespaces were reorganised to match scverse-style.** The top-level API is now `li.ds`, `li.ms`, `li.mt`, `li.pl`, `li.pp`, `li.rs` (`li.ut`, `li.mu` and `li.testing` are gone; `li.ds`, `li.pp` and `li.ms` are new). The functions themselves are unchanged — only their import path moved:
 
-  | Was | Now | Moved |
-  |---|---|---|
-  | `li.ut` (`utils`) | **removed**, split three ways | — |
-  | `li.ut.spatial_neighbors` / `spatial_pair_proximity` / `obsm_to_adata` / `interpolate_adata` / `expand_coordinates` / `query_bandwidth` / `neg_to_zero` / `zi_minmax` | **`li.pp`** (`preprocessing`, new) | preprocessing/coordinate utilities |
-  | `li.ut.get_factor_scores` / `get_variable_loadings` / `mdata_to_anndata` | **`li.ms`** (`multisample`) | multi-sample helpers |
-  | `li.ut.get_lric_auc` / `get_lric_divergence` | **`li.mt`** | live with the LRIC method |
-  | `li.mu` (`multi`) | **renamed `li.ms`** (`multisample`) | `nmf` / `estimate_elbow`, `adata_to_views` / `lrs_to_views` / `lrdata_to_mudata` / `filter_view_markers`, `to_tensor_c2c` |
-  | `li.mu.df_to_lr` | **`li.mt.df_to_lr`** | sits with the methods |
-  | `li.testing` | **renamed `li.ds`** (`datasets`) | `kang_2018`, `generate_toy_adata` / `generate_toy_mdata` / `generate_toy_spatial`, `sample_lrs` |
-  | `li.mt.build_prior_network` | **`li.rs.build_prior_network`** | it builds a resource, not a method result (`li.mt.find_causalnet` stays) |
+  | Was                                                                                                                                                                   | Now                                 | Moved                                                                                                                     |
+  | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+  | `li.ut` (`utils`)                                                                                                                                                     | **removed**, split three ways       | —                                                                                                                         |
+  | `li.ut.spatial_neighbors` / `spatial_pair_proximity` / `obsm_to_adata` / `interpolate_adata` / `expand_coordinates` / `query_bandwidth` / `neg_to_zero` / `zi_minmax` | **`li.pp`** (`preprocessing`, new)  | preprocessing/coordinate utilities                                                                                        |
+  | `li.ut.get_factor_scores` / `get_variable_loadings` / `mdata_to_anndata`                                                                                              | **`li.ms`** (`multisample`)         | multi-sample helpers                                                                                                      |
+  | `li.ut.get_lric_auc` / `get_lric_divergence`                                                                                                                          | **`li.mt`**                         | live with the LRIC method                                                                                                 |
+  | `li.mu` (`multi`)                                                                                                                                                     | **renamed `li.ms`** (`multisample`) | `nmf` / `estimate_elbow`, `adata_to_views` / `lrs_to_views` / `lrdata_to_mudata` / `filter_view_markers`, `to_tensor_c2c` |
+  | `li.mu.df_to_lr`                                                                                                                                                      | **`li.mt.df_to_lr`**                | sits with the methods                                                                                                     |
+  | `li.testing`                                                                                                                                                          | **renamed `li.ds`** (`datasets`)    | `kang_2018`, `generate_toy_adata` / `generate_toy_mdata` / `generate_toy_spatial`, `sample_lrs`                           |
+  | `li.mt.build_prior_network`                                                                                                                                           | **`li.rs.build_prior_network`**     | it builds a resource, not a method result (`li.mt.find_causalnet` stays)                                                  |
 
 - The six namespaces are also importable directly (`import liana.ms`, `import liana.pp`, …); the removed aliases (`import liana.ut` / `liana.mu` / `liana.testing`) no longer resolve — update both attribute access and direct imports.
 - **Breaking: `use_raw` now defaults to `False` (was `True`) everywhere.** Methods read `adata.X` by default instead of `adata.raw.X`, aligning with the scverse ecosystem (scanpy auto/`None`, squidpy/decoupler `False`), where log-normalised expression is expected in `.X`. Pass `use_raw=True` explicitly to keep reading `.raw`. Relatedly, `li.ds.generate_toy_adata`/`generate_toy_spatial` now ship log-normalised expression in `.X` (matching `generate_toy_mdata`), so the default path works on valid data.
@@ -96,7 +96,7 @@ liana+ now has a new home under the scverse organisation.
 - **Breaking: spatial proximity weighting in the single-cell methods is opt-in** (#255). `spatial_key` now defaults to `None` for all `li.mt` methods and `rank_aggregate` (the methods previously weighted silently whenever `obsm["spatial"]` existed; `rank_aggregate` never did). Passing a key that is not in `adata.obsm` raises `KeyError` instead of silently skipping the weighting.
 - **Typed codebase (#255).** Synced with the scverse cookiecutter template; `mypy` runs in pre-commit and CI; `.toarray()`/`.A` replaced by `fast-array-utils`. Output is unchanged. Two `_expm1_base` test expectations were corrected: the old tests passed `(base, X)` in swapped order.
 - `docrep` replaced by a small in-house docstring processor; an unknown placeholder now raises at import instead of warning.
-- **Proportion thresholds standardised.** `nz_prop` (proportion of *all* observations with a non-zero value) and `expr_prop` (proportion *within each cell-type group*) are now distinct, and both defaults live in `DefaultValues` (`liana._core._constants`). `expr_prop` now defaults to `0.05` (was `0.1`) across all single-cell methods, `rank_aggregate`, `li.mt.df_to_lr` and `li.mt.lric`'s directed (`groupby`) mode; `nz_prop` defaults to `0.05` and is shared by `li.mt.bivariate`, `li.mt.inflow` (was `0.001`) and `li.mt.lric`'s cell-type-agnostic mode (previously unmasked, `0.0`). `li.mt.lric` gained `nz_prop` for its agnostic mode, while its `expr_prop` now only applies when `groupby` is set.
+- **Proportion thresholds standardised.** `nz_prop` (proportion of _all_ observations with a non-zero value) and `expr_prop` (proportion _within each cell-type group_) are now distinct, and both defaults live in `DefaultValues` (`liana._core._constants`). `expr_prop` now defaults to `0.05` (was `0.1`) across all single-cell methods, `rank_aggregate`, `li.mt.df_to_lr` and `li.mt.lric`'s directed (`groupby`) mode; `nz_prop` defaults to `0.05` and is shared by `li.mt.bivariate`, `li.mt.inflow` (was `0.001`) and `li.mt.lric`'s cell-type-agnostic mode (previously unmasked, `0.0`). `li.mt.lric` gained `nz_prop` for its agnostic mode, while its `expr_prop` now only applies when `groupby` is set.
 
 - liana+ repository moved from saezlab/liana-py to scverse/liana.
 
@@ -121,7 +121,7 @@ liana+ now has a new home under the scverse organisation.
 - **An explicitly passed `liana_res` is no longer discarded whenever `adata` is also given (#187).** The shared `_get_liana_res` checked `adata.uns` first, which made it impossible to plot one's own frame with `li.pl.circle`. The frame now takes precedence in every plot and getter that accepts both; `li.pl.elbow` follows the same rule per argument.
 - **`li.pl.feature_by_group(normalize=False)` no longer claims a colour range the data exceeds.** `set_clim(0, 1)` sat outside the `if normalize:` block; unnormalised panels now autoscale.
 
-- **`cross_pcf` and `lric` no longer subset the point pattern when `cell_types` or `groupby_pairs` is given.** `g(r) = O_SR(r) / E_SR(r)` is a random-labelling null *conditioned on the observed point pattern*: the expectation `E_SR(r) = n_S n_R / (N (N - 1)) * T(r)` draws `N` and the support `T(r)` from every cell on the slide, not only the selected ones. Both entry points passed the selection on to `prep_check_adata` as `groupby_subset`, which deleted the unselected cells before the support was built, so `N` and `T(r)` shrank to the selection and the test silently became "are these two types clustered *among themselves*" -- a different hypothesis, not a narrower window. The selection now filters only the pairs that are emitted. **Published numbers move for any call that passes `cell_types=` or `groupby_pairs=`**: on the toy slide `5.541360 -> 5.885797`, with the curve going `[1.3587, 0.6793, 1.2738, 0.7279, 1.5017] -> [1.3768, 0.4074, 1.1473, 0.8992, 2.0550]`. How large the error was depended on how the selection sat in the tissue, and it could erase the result entirely: on a structured slide with types A and B interleaved in one patch and C elsewhere, the unselected, `cell_types=` and `groupby_pairs=` routes now all report `[1.7463, 1.7889, 1.8204]`, where the two selected routes previously collapsed to `1.0` -- precisely no spatial signal -- because dropping C left the A/B patch filling its own support. Calls that select nothing are unaffected; `min_cells` filtering is unchanged, with `min_cells=0` keeping every group; and `lric`'s expression-weighted `g` picks the correction up through the same expectation. Selecting pairs no longer makes the call cheaper, since the edge list is now built over every cell: on 8k cells, taking 2 of 8 cell types goes from 0.01 s to 0.10 s.
+- **`cross_pcf` and `lric` no longer subset the point pattern when `cell_types` or `groupby_pairs` is given.** `g(r) = O_SR(r) / E_SR(r)` is a random-labelling null _conditioned on the observed point pattern_: the expectation `E_SR(r) = n_S n_R / (N (N - 1)) * T(r)` draws `N` and the support `T(r)` from every cell on the slide, not only the selected ones. Both entry points passed the selection on to `prep_check_adata` as `groupby_subset`, which deleted the unselected cells before the support was built, so `N` and `T(r)` shrank to the selection and the test silently became "are these two types clustered _among themselves_" -- a different hypothesis, not a narrower window. The selection now filters only the pairs that are emitted. **Published numbers move for any call that passes `cell_types=` or `groupby_pairs=`**: on the toy slide `5.541360 -> 5.885797`, with the curve going `[1.3587, 0.6793, 1.2738, 0.7279, 1.5017] -> [1.3768, 0.4074, 1.1473, 0.8992, 2.0550]`. How large the error was depended on how the selection sat in the tissue, and it could erase the result entirely: on a structured slide with types A and B interleaved in one patch and C elsewhere, the unselected, `cell_types=` and `groupby_pairs=` routes now all report `[1.7463, 1.7889, 1.8204]`, where the two selected routes previously collapsed to `1.0` -- precisely no spatial signal -- because dropping C left the A/B patch filling its own support. Calls that select nothing are unaffected; `min_cells` filtering is unchanged, with `min_cells=0` keeping every group; and `lric`'s expression-weighted `g` picks the correction up through the same expectation. Selecting pairs no longer makes the call cheaper, since the edge list is now built over every cell: on 8k cells, taking 2 of 8 cell types goes from 0.01 s to 0.10 s.
 
 - **Local Moran's R analytical p-values were far too conservative, and computing them densified the weights at scale.** The null variance of `R_i = x_i(Wy)_i + y_i(Wx)_i` is `2 (n-1)^2/n^2 * s_x^2 s_y^2 (sum_j w_ij^2 + w_ii^2)`, with `s` the population standard deviation times `n/(n-1)` (Li et al. 2023, Supp. Note 1 eq. 31) -- but `_get_local_var` (renamed `_get_local_std`, since it returns a standard deviation) replaced the `w_ii^2` term with a constant independent of the weights, and multiplied by `s_x s_y` where a variance needs `s_x^2 s_y^2`. It also reads `sum_j w_ij^2` and the diagonal off the sparse weights rather than densifying them, which only saves anything from 10,000 spots up -- below that the caller hands it a dense matrix anyway. Checked against `esda` and GeoDa (`audit/liana_vs_esda_geoda.ipynb`): the statistic matches `esda.Moran_Local_BV` and `pygeoda.local_bimoran` to eight decimals. Three differences remain, none of them defects -- liana's values sit a factor `n/(n-1)` above esda's, which z-scores with the sample rather than the population standard deviation; GeoDa's `local_bimoran` is the one-sided `x_i(Wy)_i` where liana symmetrises; and neither package has a closed-form local variance at all, so the corrected one is checked against an empirical permutation null instead. One behaviour change follows from the corrected term: where the old constant floored the variance away from zero, a spot with no neighbours and no self-weight (reachable with `set_diag=False`) now has a standard deviation of exactly 0, so its analytical p-value is `nan` rather than 0.5. Such a spot has no null distribution to test against; `liana` now warns and names the count when this happens.
 
@@ -133,7 +133,7 @@ liana+ now has a new home under the scverse organisation.
 
 - **Breaking: un-log-transformed input to the log-fold-change step now raises instead of silently producing `inf`.** `_expm1_base` inverts the `log1p` transform as `base ** X - 1`, so a matrix that was never log-transformed puts raw counts in the exponent, and the resulting `inf` propagates through `lr_logfc` -- a column in the default `rank_aggregate` consensus. Because `base ** x` is monotonic, the largest entry decides whether anything overflows, so one comparison against `log(finfo(dtype).max) / log(base)` is an exact guarantee rather than a heuristic, and it names the cause. The `dtype` is the one the exponentiation promotes to, which the base decides as much as the matrix does: the default `base` is a `numpy.float64`, so the limit is 709.8 however the matrix is stored -- the toy matrix scaled by 100 (maximum 553.7) still passes -- while a float32 base over a float32 matrix overflows from 88.7 up (128 for `base=2`). Complements the "mat does not look log1p-normalised" warning, shown at the default `verbose=False`, which stays a heuristic: it catches shallow counts that do not overflow -- all-integral values, or a maximum above 50 -- while this catches the case that corrupts the result.
 
-- **`return_all_lrs=True` no longer inflates the score of every heteromeric complex.** A complex is meant to be represented by its limiting subunit, but `_filter_reassemble_complexes` collapsed the exploded subunits with `drop_duplicates(keep="first")` *before* `_reduce_complexes`. The surviving subunit was whichever came first in the resource string, and first-in-order is never smaller than the minimum, so the error only ever went one way.
+- **`return_all_lrs=True` no longer inflates the score of every heteromeric complex.** A complex is meant to be represented by its limiting subunit, but `_filter_reassemble_complexes` collapsed the exploded subunits with `drop_duplicates(keep="first")` _before_ `_reduce_complexes`. The surviving subunit was whichever came first in the resource string, and first-in-order is never smaller than the minimum, so the error only ever went one way.
 
 - **Breaking: the single-cell methods and `li.mt.lric` now reject negative expression instead of silently scoring it as `NaN`.** The single-cell pipeline assumes non-negative input in three places -- `np.sqrt(ligand_means)` in SingleCellSignalR, `np.log2(mean + 1)` in `_calc_log2fc` and `gmean` in Geometric Mean -- each of which yields `NaN` on scaled or centred data, so `prep_check_adata(block_negatives=True)` raises up front, naming the minimum it found and the three ways to point at log-normalised counts. `li.mt.lric` raises the same way, since its weights are expression relative to a per-gene mean and a mean near zero turns `g(r)` into noise rather than into an obviously broken number. `li.mt.bivariate`, `inflow` and MISTy take signed input as before.
 
@@ -149,7 +149,7 @@ liana+ now has a new home under the scverse organisation.
 
 - **`li.mt.df_to_lr` matched `stat_keys` by suffix.** The per-interaction column `interaction_{stat}` was assembled with `str.endswith`, so a statistic whose name ends with another's -- `stat` and `padj_stat`, say -- read the wrong pair of columns: on such a pair the interaction statistic goes `49.966 -> 0.701`. It is now an exact `{ligand,receptor}_{key}` match. **Published numbers move for any call whose `stat_keys` share a suffix**, and no others.
 
-- **`li.ms.mdata_to_anndata` labelled cells by position rather than by name.** `anndata.concat` returns the observation order of `x_mod`, and `adata.obs = mdata.obs.copy()` then replaced `obs_names` wholesale -- so two modalities holding the same cells in a different order gave every cell another cell's label and metadata, silently, because the obs *sets* matched and nothing was missing. `mdata.obs` is now reindexed onto the concatenated order, and `obsm`/`obsp` are permuted through `Index.get_indexer` (`value[idx]`, `value[idx][:, idx]`) instead of being assigned positionally -- which also makes a `MuData` whose `obs_names` are a superset of the modalities' work, since the rows are located by name and only then taken positionally.
+- **`li.ms.mdata_to_anndata` labelled cells by position rather than by name.** `anndata.concat` returns the observation order of `x_mod`, and `adata.obs = mdata.obs.copy()` then replaced `obs_names` wholesale -- so two modalities holding the same cells in a different order gave every cell another cell's label and metadata, silently, because the obs _sets_ matched and nothing was missing. `mdata.obs` is now reindexed onto the concatenated order, and `obsm`/`obsp` are permuted through `Index.get_indexer` (`value[idx]`, `value[idx][:, idx]`) instead of being assigned positionally -- which also makes a `MuData` whose `obs_names` are a superset of the modalities' work, since the rows are located by name and only then taken positionally.
 
 - **`li.mt.find_causalnet` no longer rejects the flow its own docstring documents.** `li.rs.build_prior_network` prunes the graph to the nodes reachable between inputs and outputs by design -- it reports "Selected inputs: X/Y" while doing it -- and rewrites `L^R -> R` under `lr_sep`, so a scored node that is not a vertex of the prior graph is the normal case rather than user error, and the documented two-step example always raised (`['HLA-DRA^CD4']`). Such nodes are now dropped from both score dictionaries, with a warning naming them.
 
@@ -163,7 +163,7 @@ liana+ now has a new home under the scverse organisation.
 
 - **Breaking: bad input to the single-cell pipeline is named where it used to fail somewhere else, or not at all.**
   - Nothing passing `expr_prop` raises, quoting the highest `prop_min` in the frame and naming `return_all_lrs` as no escape from it. It used to die inside pandas with no liana frame in the traceback and no mention of `expr_prop`; with `return_all_lrs=True` it returned a frame, so that route is breaking.
-  - A `groupby` label that is `NaN` raises, naming the count of unlabelled cells. The check sits in `prep_check_adata`, so it applies to every method: the permutation methods used to fold those cells into the *first* cell type by an `argmax` while the divisor excluded them, and a run without permutations dropped them without a word (40 cells on the toy data).
+  - A `groupby` label that is `NaN` raises, naming the count of unlabelled cells. The check sits in `prep_check_adata`, so it applies to every method: the permutation methods used to fold those cells into the _first_ cell type by an `argmax` while the divisor excluded them, and a run without permutations dropped them without a word (40 cells on the toy data).
   - `min_cells=None` together with a `groupby` raises, pointing at `min_cells=0`. `pandas`' `>= None` is all-False, so it silently deleted every cell.
   - `li.mt.inflow`, `li.pp.spatial_neighbors`, `li.pl.feature_by_group` and `li.pl.circle` name the missing `groupby` column instead of emitting a bare `KeyError: '<value>'`, and no longer convert the caller's `obs` column to categorical on the way past.
 
@@ -206,7 +206,7 @@ liana+ now has a new home under the scverse organisation.
 - `li.rs.get_metalinks` docstring claimed `source` was dropped; the frame has one row per edge and curating database, so a per-edge mean of `mor` is a vote across them.
 - **Tutorials moved to a dedicated repository** ([dbdimitrov/liana-tutorials](https://github.com/dbdimitrov/liana-tutorials)) and pulled back in as a git submodule at `docs/tutorials` (the pertpy-tutorials pattern). `docs/notebooks/` was removed; the toctree now lives in `docs/tutorials.md` and renders the notebooks from `docs/tutorials/notebooks/*.ipynb`. Rendered tutorial URLs move from `…/notebooks/<name>.html` to `…/tutorials/notebooks/<name>.html`. RTD builds the submodule (`submodules: include: all`); the tutorial-execution extras (`tutorials` / `tutorials-gpu`) stay in liana-py.
 - All 14 tutorials were re-run and their headings normalised to a consistent hierarchy.
-- **`filter_fn` says what it actually selects.** In `li.pl.dotplot`/`li.pl.tileplot` an interaction is kept when the predicate holds for *any* source-target pair and is then plotted for all of them. This is intended and unchanged; the docstring now says so and names the row-wise cases.
+- **`filter_fn` says what it actually selects.** In `li.pl.dotplot`/`li.pl.tileplot` an interaction is kept when the predicate holds for _any_ source-target pair and is then plotted for all of them. This is intended and unchanged; the docstring now says so and names the row-wise cases.
 
 ## 1.10.0 (27.08.2026)
 
@@ -233,7 +233,7 @@ liana+ now has a new home under the scverse organisation.
 
 ### Fixed
 
-- **MiSTy's `LinearModel` applied `n_jobs` to the first target only, then forked a worker per core for every other one.** `fit` *popped* `n_jobs` from state shared across targets, so all but the first fell back to the `-1` default -- spending ~4s on joblib pool startup to cross-validate a linear regression. It is now read rather than popped, defaults to `1`, and is documented; results are bit-identical.
+- **MiSTy's `LinearModel` applied `n_jobs` to the first target only, then forked a worker per core for every other one.** `fit` _popped_ `n_jobs` from state shared across targets, so all but the first fell back to the `-1` default -- spending ~4s on joblib pool startup to cross-validate a linear regression. It is now read rather than popped, defaults to `1`, and is documented; results are bit-identical.
 - **`import liana.mu` raised `ModuleNotFoundError`.** `mu` was the one short alias missing from the `sys.modules` registration, so it failed while its four siblings resolved.
 - **`_calc_log2fc` raised a bare `ZeroDivisionError` when a group had nothing to compare against (#93).** A `sample_key` group holding a single `groupby` category leaves the "rest" side empty; a `ValueError` now names the cause.
 - **Dropped the `MAML2-NOTCH1/2/3/4` rows from the consensus resource (#207, PR #247).** MAML2 is a nuclear transcriptional co-activator, not a surface ligand, so these were a curation artifact; a regression test keeps them out.
@@ -688,8 +688,8 @@ refer to the tutorials, API, and documentation.
 
 \- Refactored `sc._Method._get_means_perms` & related scoring functions to be more efficient.
 
-:   `None` can now be passed to n_perms to avoid permutations - these
-    are only relevant if specificity is assumed to be relevant.
+: `None` can now be passed to n_perms to avoid permutations - these
+are only relevant if specificity is assumed to be relevant.
 
 - LIANA\'s aggregate method can now be customized to include any method
   of choice (added an example to basic_usage).
@@ -810,13 +810,13 @@ First release alpha version of **liana-py**
 
 -
 
-  Re-implementations of:
+Re-implementations of:
 
-  :   - CellPhoneDB
-      - NATMI
-      - SingleCellSignalR
-      - Connectome
-      - logFC
-      - Robust aggregate rank
+: - CellPhoneDB
+- NATMI
+- SingleCellSignalR
+- Connectome
+- logFC
+- Robust aggregate rank
 
 - Ligand-receptor resources as generated via OmniPathR.
