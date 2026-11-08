@@ -54,7 +54,7 @@ positional.
 
 ## Footguns
 
-- Missing `obsp["spatial_connectivities"]` raises: always run `spatial_neighbors` first. A *stale*
+- Missing `obsp["spatial_connectivities"]` raises: always run `spatial_neighbors` first. A _stale_
   graph under that key is reused silently, so re-run it after changing the coordinates, `bandwidth`
   or the subset of cells.
 - Several slides concatenated share coordinate space and produce false neighbours: run

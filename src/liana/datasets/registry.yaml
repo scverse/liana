@@ -6,7 +6,6 @@
 base_url: https://exampledata.scverse.org/liana
 
 datasets:
-
   kang_2018:
     type: anndata
     files:
