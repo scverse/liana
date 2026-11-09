@@ -1,5 +1,6 @@
 import sqlite3
 from pathlib import Path
+from typing import Literal, overload
 
 import pandas as pd
 import pooch
@@ -51,6 +52,57 @@ def _format_clauses(
         where_clauses.append(f"{table_ref}.{column_name} IN ({formatted_str})")
 
 
+@overload
+def get_metalinks(
+    db_path: str | Path | None = None,
+    types: str | list[str] | None = None,
+    cell_location: str | list[str] | None = None,
+    tissue_location: str | list[str] | None = None,
+    biospecimen_location: str | list[str] | None = None,
+    disease: str | list[str] | None = None,
+    pathway: str | list[str] | None = None,
+    hmdb_ids: str | list[str] | None = None,
+    uniprot_ids: str | list[str] | None = None,
+    source: str | list[str] | None = None,
+    *,
+    split: Literal[False] = False,
+) -> pd.DataFrame: ...
+
+
+@overload
+def get_metalinks(
+    db_path: str | Path | None = None,
+    types: str | list[str] | None = None,
+    cell_location: str | list[str] | None = None,
+    tissue_location: str | list[str] | None = None,
+    biospecimen_location: str | list[str] | None = None,
+    disease: str | list[str] | None = None,
+    pathway: str | list[str] | None = None,
+    hmdb_ids: str | list[str] | None = None,
+    uniprot_ids: str | list[str] | None = None,
+    source: str | list[str] | None = None,
+    *,
+    split: Literal[True],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None]: ...
+
+
+@overload
+def get_metalinks(
+    db_path: str | Path | None = None,
+    types: str | list[str] | None = None,
+    cell_location: str | list[str] | None = None,
+    tissue_location: str | list[str] | None = None,
+    biospecimen_location: str | list[str] | None = None,
+    disease: str | list[str] | None = None,
+    pathway: str | list[str] | None = None,
+    hmdb_ids: str | list[str] | None = None,
+    uniprot_ids: str | list[str] | None = None,
+    source: str | list[str] | None = None,
+    *,
+    split: bool = False,
+) -> pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None]: ...
+
+
 @d.dedent
 def get_metalinks(
     db_path: str | Path | None = None,
@@ -63,7 +115,9 @@ def get_metalinks(
     hmdb_ids: str | list[str] | None = None,
     uniprot_ids: str | list[str] | None = None,
     source: str | list[str] | None = None,
-) -> pd.DataFrame:
+    *,
+    split: bool = False,
+) -> pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None]:
     """
     Fetches edges of metabolite-proteins with specified annotations, applying filters if they are not None.
 
@@ -91,11 +145,22 @@ def get_metalinks(
         Desired UniProt IDs.
     source
         Desired source databases.
+    split
+        Whether to split the edges into the inputs of :func:`liana.mt.estimate_metalinks`.
+        Requires both 'lr' and 'pd' `types`, which is also the default when `types` is None.
 
     Returns
     -------
-    A pandas DataFrame with one row per edge and curating `source`, so an edge annotated by several
+    If `split` is False, a pandas DataFrame with one row per edge and curating `source`, so an edge annotated by several
     databases appears once per database and a per-edge mean of `mor` is a vote across them.
+
+    If `split` is True, a tuple of `(resource, pd_net, t_net)`:
+
+    - `resource`: the unique metabolite-receptor pairs of the 'lr' edges, with `ligand` and `receptor` columns.
+    - `pd_net`: the 'pd' edges as `source` (metabolite), `target` (gene), and `weight` -- the mean `mor` across
+      curating databases, so +1 is production, -1 is degradation, and 0 is a tie that is kept.
+    - `t_net`: the 'pd' edges with a transport direction, with export ('out') as +1 and import ('in') as -1,
+      averaged per edge and with ties (0) removed; None if no such edges remain.
 
     Examples
     --------
@@ -107,7 +172,21 @@ def get_metalinks(
             types=["lr"],
             biospecimen_location="Blood",
         )
+
+    With `split=True`, the edges are instead returned as the inputs of :func:`liana.mt.estimate_metalinks`::
+
+        resource, pd_net, t_net = get_metalinks(biospecimen_location="Blood", split=True)
+        mdata = li.mt.estimate_metalinks(adata, resource, pd_net=pd_net, t_net=t_net)
     """
+    if split:
+        if types is None:
+            types = ["lr", "pd"]
+        elif not {"lr", "pd"}.issubset([types] if isinstance(types, str) else types):
+            raise ValueError(
+                f"`split=True` builds both the ligand-receptor resource and the production-degradation networks, "
+                f"so `types` must include both 'lr' and 'pd'; got {types!r}."
+            )
+
     path = Path(db_path) if db_path is not None else _download_metalinksdb()
     conn = sqlite3.connect(path)
 
@@ -174,7 +253,34 @@ def get_metalinks(
     df = pd.read_sql_query(full_query, conn)
     conn.close()
 
-    return df
+    if not split:
+        return df
+    return _split_metalinks(df)
+
+
+def _split_metalinks(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame | None]:
+    """Split MetalinksDB edges into a metabolite-receptor resource and production-degradation and transport networks."""
+    keys = ["metabolite", "gene_symbol"]
+    to_net = {"metabolite": "source", "gene_symbol": "target", "mor": "weight"}
+
+    resource = (
+        df.loc[df["type"] == "lr", keys]
+        .rename(columns={"metabolite": "ligand", "gene_symbol": "receptor"})
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+
+    pd_edges = df[df["type"] == "pd"]
+    # mean `mor` across curating databases; ties (0) are kept
+    pd_net = pd_edges[[*keys, "mor"]].groupby(keys).mean().reset_index().rename(columns=to_net)
+
+    # export is positive and import negative; ties (0) are dropped
+    t_edges = pd_edges[[*keys, "transport_direction"]].dropna()
+    t_edges = t_edges.assign(mor=t_edges["transport_direction"].map({"out": 1, "in": -1})).dropna(subset=["mor"])
+    t_net = t_edges[[*keys, "mor"]].groupby(keys).mean().reset_index()
+    t_net = t_net[t_net["mor"] != 0].reset_index(drop=True).rename(columns=to_net)
+
+    return resource, pd_net, (t_net if not t_net.empty else None)
 
 
 @d.dedent
