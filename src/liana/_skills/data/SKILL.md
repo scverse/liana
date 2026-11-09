@@ -1,120 +1,70 @@
 ---
 name: liana
-description: Cell-cell communication (CCC) inference with the liana Python package (LIANA+, scverse). Use for any task involving liana or ligand-receptor (LR) analysis of AnnData/MuData objects. Triggers on steady-state LR scoring (rank_aggregate, CellPhoneDB, CellChat, NATMI, Connectome, SingleCellSignalR, logFC, scSeqComm); multi-sample or differential CCC (by_sample, MOFA+, Tensor-cell2cell, df_to_lr, pyCrossTalkeR); spatial CCC on Visium, Xenium, MERFISH, CosMx or slide-seq (spatial_neighbors, bivariate local/global metrics, Moran's R, Inflow, LRIC, cross-PCF, MISTy); multimodal CITE-seq or spatial metabolomics; metabolite-mediated CCC via MetalinksDB; LR resources and orthology for mouse or other organisms (consensus, mouseconsensus, OmniPath, HCOP); liana plots (dotplot, tileplot, circle). Also use when the user says cell-cell interactions, crosstalk, signalling between cell types, sender and receiver, or niche signalling, even without naming liana.
+description: Infers cell-cell communication (CCC) and ligand-receptor interactions with the liana Python package (LIANA+, scverse) on AnnData/MuData objects. Covers dissociated single-cell data, multi-sample and multi-condition designs, spatial data (Visium, Xenium, MERFISH, CosMx), multimodal CITE-seq, and metabolite-mediated signalling. Includes CellPhoneDB, CellChat, rank aggregation, MISTy, Tensor-cell2cell and MOFA+. Use it whenever the user asks about cell-cell interactions, crosstalk, sender and receiver cell types, ligand-receptor pairs or niche signalling, even if liana is not named.
 ---
 
 # liana (LIANA+)
 
-`import liana as li`. Submodules: `li.mt` methods, `li.pp` preprocessing (spatial graphs,
-transforms), `li.rs` prior knowledge, `li.pl` plots, `li.ms` multi-sample helpers, `li.ds` datasets.
-Every method accepts an `AnnData` or a `MuData`. Snippets also assume `import scanpy as sc, mudata as mu,
-decoupler as dc, numpy as np, pandas as pd`.
+`import liana as li`: `li.mt` methods, `li.pp` preprocessing, `li.rs` prior knowledge, `li.pl` plots,
+`li.ms` multi-sample helpers, `li.ds` datasets. Snippets assume `scanpy as sc`, `numpy as np`,
+`pandas as pd`, `mudata as mu`, `anndata as ad`.
 
 ## Workflow
 
-1. **Intake.** Ask for the object or a path to it, and say explicitly that a description of the
-   data is fine instead if it cannot be shared (patient data, privacy). Raw vendor output is not an
-   object yet: a Space Ranger `outs/` folder loads with `sc.read_visium`, a 10x `.h5` with
-   `sc.read_10x_h5`, Xenium, CosMx or MERSCOPE exports with `spatialdata_io`. If a path is given,
-   run the snippet below and infer what you can; then ask only what the object cannot tell you,
-   usually the aim and, when several columns qualify, which one holds the condition or cell type.
-   Without an object, ask in plain words and only what the message left open: tissue and
-   technology; one or several samples and how they group; whether cell types are annotated;
-   species; any modality beyond RNA (protein, measured metabolites); and what they want to learn.
-   Ask about coordinate units only for spatial data, and whether counts were normalised and
-   log-transformed (e.g. scanpy `normalize_total` + `log1p`) only if the snippet could not run.
-2. **Select** the branch from the table.
-3. **Read** that one reference file. Also read `prior-knowledge.md` for non-human data or a custom
-   LR list, and `outputs-and-plotting.md` before plotting or interpreting `liana_res`.
-4. **Run**, then explain in one paragraph without column names: what was scored, which method and
-   why, what a high score means, and the main caveat. Name any bandwidth or threshold you chose.
-
-```python
-import anndata as ad, mudata as mu, numpy as np
-
-a = mu.read(path) if path.endswith(".h5mu") else ad.read_h5ad(path)
-print(type(a).__name__, a.shape, "mods:", list(getattr(a, "mod", {})))
-for c in a.obs.columns:
-    if a.obs[c].dtype.kind not in "biuf":
-        u = a.obs[c].unique()
-        print(c, len(u), list(u[:6]))
-print("obsm:", list(a.obsm), "obsp:", list(a.obsp), "uns:", list(a.uns))
-d = lambda M: M.toarray() if hasattr(M, "toarray") else np.asarray(M)
-for name, m in (a.mod.items() if hasattr(a, "mod") else [("", a)]):   # a MuData has no .X or .layers
-    X = d(m.X[:200])
-    print(name, "layers:", list(m.layers), "X min/max:", X.min(), X.max(),
-          "integer-like:", np.allclose(X, X.round()), "var sample:", list(m.var_names[:5]))
-    if m.raw is not None:
-        R = d(m.raw.X[:200])
-        print(name, "raw min/max:", R.min(), R.max(), "(negative = scaled, do not use)")
-if "spatial" in a.obsm:
-    print(
-        "coords min/max:",
-        a.obsm["spatial"].min(0),
-        a.obsm["spatial"].max(0),
-        "uns spatial:",
-        list(a.uns.get("spatial", {})),
-    )
-```
-
-## Selection
+1. **Intake.** Ask for the object or its path; say a description is fine if the data cannot be shared.
+   With a path, run `python <skill dir>/scripts/inspect_object.py <path>` (skill dir: where this file
+   lives, e.g. `~/.claude/skills/liana`; takes `.h5ad`, `.h5mu` or a Space Ranger `outs/`). From its output infer:
+   - which matrix is non-negative log1p (`.X`, a layer); counts or negative values need fixing first;
+   - the cell-type, sample and condition columns; modalities; organism and ID type;
+   - for spatial data, the coordinate unit (scalefactors).
+   Ask only what is still missing, usually the aim and which column is which. Without a file, ask
+   briefly: tissue and technology, samples and grouping, annotation, species, extra modalities, aim. To analyse an `outs/` folder use `squidpy.read.visium`; Xenium,
+   CosMx, MERSCOPE load with `spatialdata_io`.
+2. **Select** a branch from the table.
+3. **Read** that file, plus [spatial-setup.md](references/spatial-setup.md) for any spatial task,
+   [prior-knowledge.md](references/prior-knowledge.md) for non-human data or custom LR lists, and
+   [outputs-and-plotting.md](references/outputs-and-plotting.md) before plotting or interpreting `liana_res`.
+   When liana raises an error or warning, read [troubleshooting.md](references/troubleshooting.md).
+4. **Run**, plot the top hits with `li.pl.*`, list the top few as sender → receiver: ligand → receptor, then explain in one paragraph without column names: what was scored, which method and
+   why, what a high score means, the main caveat. Name any bandwidth (in µm and in coordinate units)
+   or threshold you chose, and end with the citations (see Citing).
 
 | Data and aim | Read |
 |---|---|
-| Dissociated single cells, one dataset: rank LR interactions between cell types | [single-cell-lr.md](references/single-cell-lr.md) |
-| Dissociated single cells, several samples or conditions: what changes between them | [multisample.md](references/multisample.md) |
-| Spatial spots (Visium) or cells: where do ligand and receptor co-vary in space, local and global scores | [spatial-bivariate.md](references/spatial-bivariate.md) |
-| Spatial single cells with cell-type labels (Xenium, MERFISH, CosMx): which types signal to which via which LRs | [inflow.md](references/inflow.md) |
-| Spatial single cells: at what distance do interactions occur, spatial scale of cell-type pairs | [lric.md](references/lric.md) |
-| Spatial, unsupervised: what in a spot's neighbourhood predicts its expression, multi-view learning | [misty.md](references/misty.md) |
+| Dissociated cells, one dataset: rank LR interactions between cell types | [single-cell-lr.md](references/single-cell-lr.md) |
+| Dissociated cells, several samples or conditions: what changes | [multisample.md](references/multisample.md) |
+| Spatial spots or cells: where ligand and receptor co-vary, local and global | [spatial-bivariate.md](references/spatial-bivariate.md) |
+| Spatial cells with labels (Xenium, MERFISH, CosMx): which types signal to which | [inflow.md](references/inflow.md) |
+| Spatial cells: at what distance interactions occur | [lric.md](references/lric.md) |
+| Spatial, unsupervised: what in the neighbourhood predicts expression | [misty.md](references/misty.md) |
 | Metabolite-mediated CCC, estimated from RNA or measured (MSI) | [metabolites.md](references/metabolites.md) |
-| Resources, organism translation, custom LR lists, gene sets from LRs | [prior-knowledge.md](references/prior-knowledge.md) |
-| Reading `liana_res`, score semantics, plotting | [outputs-and-plotting.md](references/outputs-and-plotting.md) |
 
-The table is a starting point, not a rule: methods are modular and combine. Multi-modal input is
-not a branch. Every method takes a `MuData`; each file ends with a Variants section saying how, and
-offer those variants only when the data calls for them.
+Methods combine; the table is a starting point. Offer metabolite-mediated CCC (estimated from any RNA
+data) when the user wants the complete picture or mentions metabolites, hormones, neurotransmitters or lipids.
 
-**Widen the question.** Every branch also covers non-protein mediators. Any RNA dataset, dissociated or
-spatial, can be scored for metabolite-mediated CCC by estimating metabolite abundance from enzyme and
-transporter expression (MetalinksDB), and a second modality (protein, measured metabolites) can
-supply the ligands or the receptors. Offer this whenever the user wants the complete picture, names
-metabolites, neurotransmitters, hormones or lipids, or has such a modality: read `metabolites.md`.
+## Essentials
 
-## Facts that apply everywhere
-
-- **Input**: (typically) non-negative, library-size normalised, log1p expression in `.X` (or `layer=`).
-  `use_raw` defaults to `False`. The single-cell methods reject negative input with `ValueError: mat
-  contains negative values`, so scaled or z-scored values cannot be passed to them at all. They
-  also check for raw counts: all-integral values, or a maximum above 50, warn that the matrix does
-  not look log1p-normalised, and, wherever a log-fold-change is computed (`li.mt.logfc`, and so
-  `rank_aggregate`), a maximum above ~709 -- where inverting the log overflows -- raises
-  `ValueError: mat contains values too large to have been log-transformed`.
-  Spatial methods with `x_transform`/`y_transform` (bivariate, MISTy) also accept scaled input.
-- **"Please check if appropriate organism/ID type was provided!"** means the resource and
-  `var_names` do not overlap. Tell the user both causes: `var_names` that are not gene symbols
-  (Ensembl IDs, the wrong matrix), and non-human data with the human `consensus` resource. For
-  mouse use `resource_name="mouseconsensus"`; for a fuller map or any other organism translate
-  the resource with HCOP orthologs (`li.rs.get_hcop_orthologs`, read `prior-knowledge.md`).
-- **Complexes**: subunits joined by `_`. `ligand_complex` / `receptor_complex` hold the full name.
-  `ligand` / `receptor` hold the least-expressed subunit; both they and `*_means` / `*_props` are
-  in a single method's result and in `rank_aggregate`'s.
-- **Where results land**: single-cell methods write `adata.uns["liana_res"]` in place;
-  `bivariate` and `inflow` return a **new** AnnData; `lric`, `cross_pcf` and MISTy write `.uns` keys.
-- **Two thresholds**, both 0.05 by default and worth tuning: `expr_prop` (single-cell methods, and
-  `lric`'s cell-type-directed mode) is the fraction of cells within a cell-type group expressing a
-  gene; `nz_prop` (spatial methods only) is the fraction of all cells or spots with a non-zero value.
-- Plot with `li.pl.*` (plotnine, returns a `ggplot`). Do not rebuild these plots from matplotlib primitives.
-- Extras: MOFA, Tensor-cell2cell, pseudobulk DE, causal networks and MetalinksDB need
-  `pip install 'liana[extras]'`. Before writing code for such a route, import the package it needs
-  (`pydeseq2`, `decoupler`, `muon`, `cell2cell`, `corneto`) and, on ImportError, give the user that
-  command first. Downloads (`li.ds.kang_2018`, HCOP tables, MetalinksDB) are cached under
-  `scanpy.settings.datasetdir` (default `./data`); set `sc.settings.datasetdir` to redirect them.
+- **Input**: non-negative, normalised log1p expression in `.X` or `layer=`; `use_raw=False` by default.
+  Scaled input only for spatial methods with `x_transform`/`y_transform` (`bivariate`, `inflow`).
+- **MuData**: `x_mod`/`y_mod` pick the ligand/receptor modality (in `mdata_kwargs` for single-cell methods). `lric`, `cross_pcf` and `estimate_metalinks` take AnnData only.
+- **Results**: single-cell methods write `uns["liana_res"]`; `bivariate`, `inflow` return a new AnnData;
+  `lric`, `cross_pcf` and MISTy write `uns` keys.
+- **Thresholds**: `expr_prop` = fraction of cells within a group expressing a gene (single-cell methods,
+  directed `lric`); `nz_prop` = fraction of all cells/spots non-zero (spatial methods); MISTy uses
+  `nz_threshold` (0.1). Both props default to 0.05; tune them.
+- **Complexes**: subunits joined by `_`; `ligand`/`receptor` hold the least-expressed subunit. CellChat
+  picks it by trimean and reports `*_trimean` and `mat_max` instead of `*_means`.
+- **Plots**: use `li.pl.*`; they return a plotnine `ggplot`, except `circle` (Axes), `annulus` (Figure),
+  `feature_by_group` ((Figure, Axes)).
+- **Extras** (MOFA, Tensor-cell2cell, pseudobulk DE, causal networks, metabolite estimation, NMF):
+  import the package first (`muon`, `cell2cell`, `pydeseq2`, `corneto`, `decoupler`, `kneed`); on
+  ImportError give `pip install 'liana[extras]'`.
+- Downloads (datasets, HCOP, MetalinksDB) cache under `sc.settings.datasetdir` (default `./data`).
 
 ## Citing
 
-Always cite LIANA+ (Dimitrov et al., Nat Cell Biol 2024, doi:10.1038/s41556-024-01469-w) plus the
-original paper of the method and resource used: `li.mt.<method>.reference` holds each single-cell
-method's citation, and `li.rs.show_resources()` names the resource databases. For the consensus resource
-and rank aggregate also cite Dimitrov et al., Nat Commun 2022 (doi:10.1038/s41467-022-30755-0). Inflow and
-LRIC are unpublished (Alsayah et al., in preparation): cite LIANA+ for them meanwhile.
+Cite LIANA+ (Dimitrov et al., Nat Cell Biol 2024, doi:10.1038/s41556-024-01469-w) plus the method and
+resource used: `li.mt.<method>.reference`, `li.rs.show_resources()`. For the consensus resource and
+rank aggregate add Dimitrov et al., Nat Commun 2022 (doi:10.1038/s41467-022-30755-0); for MetalinksDB, Farr
+et al., Brief Bioinform 2024 (doi:10.1093/bib/bbae347). Inflow and LRIC are
+unpublished (Alsayah et al., in preparation): cite LIANA+ for them.

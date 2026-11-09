@@ -32,14 +32,17 @@ def test_skill_md_is_short() -> None:
     assert len((DATA / "SKILL.md").read_text().splitlines()) < 500
 
 
+def test_scripts_named_in_skill_md_exist() -> None:
+    for script in re.findall(r"scripts/[\w-]+\.py", (DATA / "SKILL.md").read_text()):
+        assert (DATA / script).is_file(), script
+
+
 def test_links_resolve_one_level_deep() -> None:
-    for md in ALL_MD:
-        for target in re.findall(r"\]\(([^)#]+\.md)\)", md.read_text()):
-            resolved = (md.parent / target).resolve()
-            assert resolved.is_file(), f"{md.name} -> {target}"
-            if md.name != "SKILL.md":
-                # reference files may only point at siblings, never deeper
-                assert resolved.parent == md.parent, f"{md.name} -> {target}"
+    for target in re.findall(r"\]\(([^)#]+\.md)\)", (DATA / "SKILL.md").read_text()):
+        assert (DATA / target).is_file(), f"SKILL.md -> {target}"
+    for md in REFS:
+        # references never send the reader on to another file (no chains): only SKILL.md routes
+        assert not re.findall(r"[\w-]+\.md\b", md.read_text()), f"{md.name} mentions another .md file"
     linked = {
         (DATA / t).resolve() for t in re.findall(r"\]\((references/[^)]+\.md)\)", (DATA / "SKILL.md").read_text())
     }
@@ -100,6 +103,7 @@ def test_code_blocks_carry_no_defaults(md: Path) -> None:
 def test_install_and_force(tmp_path: Path) -> None:
     dest = install_skill(dest=tmp_path / "liana")
     assert (dest / "SKILL.md").is_file() and (dest / "references").is_dir()
+    assert (dest / "scripts" / "inspect_object.py").is_file()
     with pytest.raises(FileExistsError):
         install_skill(dest=dest)
     assert install_skill(dest=dest, force=True) == dest

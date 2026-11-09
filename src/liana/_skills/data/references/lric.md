@@ -1,53 +1,38 @@
 # LRIC and cross-PCF: at what distance do interactions occur
 
-Aim: for cell-type pairs (cross-PCF) or LR pairs (LRIC), an enrichment curve `g(r)` over distance:
-`g > 1` co-enrichment, `≈ 1` random, `< 1` avoidance. Single-cell resolution data with coordinates.
-Tutorial: `LRIC_tutorial`. Unpublished extension (Alsayah et al., in preparation): cite LIANA+ meanwhile.
+Aim: an enrichment curve `g(r)` over distance for cell-type pairs (cross-PCF) or LR pairs (LRIC):
+`g > 1` co-enrichment, `≈ 1` random, `< 1` avoidance. Single-cell data with coordinates; AnnData only.
+Tutorial: `LRIC_tutorial`.
 
-## Three modes, two arguments
-
-| mode | call | adds |
+| mode | call | adds to `uns` |
 |---|---|---|
-| tissue architecture only | `li.mt.cross_pcf(adata, groupby="cell_type")` | `source`, `target`, `interaction`, `radius`, `g` |
-| LR, cell-type agnostic | `li.mt.lric(adata, resource_name=...)` | `ligand_complex`, `receptor_complex`, `interaction`, `radius`, `g` |
-| LR, directed by cell type | `li.mt.lric(adata, resource_name=..., groupby="cell_type")` | plus `source`, `target`, `g_expr`, `g_pcf` |
+| tissue architecture only | `li.mt.cross_pcf(adata, groupby="cell_type")` | `cross_pcf`: `source`, `target`, `interaction`, `radius`, `g` |
+| LR, cell-type agnostic | `li.mt.lric(adata, resource_name=...)` | `lric`: `ligand_complex`, `receptor_complex`, `interaction`, `radius`, `g` |
+| LR, directed by cell type | `li.mt.lric(..., groupby="cell_type")` | plus `source`, `target`, `g_expr`, `g_pcf` |
 
-In the directed mode `g_pcf` equals cross-PCF and `g` is the expression-weighted curve, so `g > 1` can
-only come from cells that express the ligand and receptor. Results land in `adata.uns["lric"]` /
-`adata.uns["cross_pcf"]` (`inplace=False` returns the DataFrame).
-
-## Radii and filters
+In the directed mode `g_pcf` is the cross-PCF and `g` the expression-weighted curve, so `g > 1` comes
+only from cells expressing ligand and receptor. `inplace=False` returns the DataFrame.
 
 ```python
-li.pl.annulus(adata)                                                     # check the rings on the tissue first
-li.mt.lric(adata, resource_name="mouseconsensus", groupby="cell_type")   # radii: max_radius, radius_step
-```
-
-- `max_radius`, `radius_step` (and `annulus_steps`) are in coordinate units; convert pixels to µm first
-  (`spatial-bivariate.md`, graph section). The defaults assume µm
-  and a cell diameter of about 20 µm; if coordinates are pixels, convert them or scale the radii.
-  The `radius` column is the inner edge of each annulus; the first annulus starts at 0.
-- `min_cells=None` drops cell types making up 1% or less of the cells; pass an integer to override.
-- `nz_prop` applies in the agnostic mode (fraction of all cells), `expr_prop` in the directed mode
-  (fraction within each cell type). Masked pairs stay as NaN rows.
-- `groupby_pairs` and `cell_types` restrict which pairs are *emitted*, not which cells are used
-  (the null conditions on the whole slide), so they do not make the call faster.
-- Weights are the expression as given; per-gene rescaling cancels in `g(r)`. To weight by a nonlinear
-  transform (e.g. `sqrt`), store it in a layer and pass `layer=`.
-
-## Summaries and plots
-
-```python
-li.mt.get_lric_auc(adata)            # per curve: score = mean log2 g over radii, peak_radius
-li.pl.lric_lineplot(adata, interaction="Apoe^Lrp1", source="Astro", target="Neuron")
-li.mt.get_lric_divergence(adata, feature_a={"source": "Astro", "target": "Neuron", "interaction": "Apoe^Lrp1"},
-                          feature_b={"source": "Micro", "target": "Neuron", "interaction": "Apoe^Lrp1"})
+li.pl.annulus(adata, radius_step=10)                         # check the rings on the tissue first
+li.mt.lric(adata, groupby="cell_type", resource_name="consensus", max_radius=100, radius_step=10)
+auc = li.mt.get_lric_auc(adata)                              # per curve: score (mean log2 g), peak_radius
+top = auc.iloc[0]
+li.pl.lric_lineplot(adata, interaction=top["interaction"], source=top["source"], target=top["target"])
+feature_a = {"source": top["source"], "target": top["target"], "interaction": top["interaction"]}
+senders = auc[(auc["interaction"] == top["interaction"]) & (auc["target"] == top["target"])]["source"]
+feature_b = {**feature_a, "source": senders.iloc[1]}           # same LR and receiver, another sender
+li.mt.get_lric_divergence(adata, feature_a=feature_a, feature_b=feature_b)
 li.pl.lric_divergence(adata, feature_a=feature_a, feature_b=feature_b)
 ```
 
-`get_lric_auc` output columns match `li.pl.dotplot`. It scores one curve per key, so it raises on a
-result whose rows are told apart by an extra column (`sample`, `condition`) rather than scoring one
-of them arbitrarily: pass one sample at a time. Divergence compares two curves selected by
-`{column: value}` dicts over any columns, so after concatenating results from several samples with a
-`condition` column it compares the same interaction across conditions. `g` is floored at 0.05
-before `log2`; pass `transform_fn=np.log2` to drop empty bins instead.
+- `max_radius`, `radius_step` are in coordinate units (defaults assume µm, ~20 µm cells).
+  `annulus_steps` is an integer ring width in multiples of `radius_step` (smooths sparse curves).
+  `radius` is each annulus' inner edge; the first starts at 0.
+- `min_cells=None` drops cell types making up ≤ 1% of cells; pass an integer to override.
+- Masked pairs (filtered by `nz_prop` in the agnostic mode, `expr_prop` in the directed one) stay as NaN rows.
+- `groupby_pairs`, `cell_types` restrict which pairs are reported, not which cells are used, so they do not speed it up.
+- Per-gene rescaling cancels in `g(r)`; for a nonlinear weight (e.g. `sqrt`) pass a `layer=`.
+- `get_lric_auc` output fits `li.pl.dotplot`; it raises on results stacked over samples (summarise one
+  at a time). Divergence selects curves by `{column: value}`, so it can compare conditions after concatenating
+  samples. `g` is floored at 0.05 before `log2`; `transform_fn=np.log2` drops empty bins instead.
