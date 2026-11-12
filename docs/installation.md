@@ -3,31 +3,23 @@
 LIANA+ requires Python 3.12 or newer.
 
 ::::{tab-set}
-
 :::{tab-item} pip
-
 ```bash
 pip install liana
 ```
-
 :::
 
 :::{tab-item} uv
-
 ```bash
 uv add liana
 ```
-
 :::
 
 :::{tab-item} conda
-
 ```bash
 conda install bioconda::liana
 ```
-
 :::
-
 ::::
 
 This installs the ligand-receptor methods, the spatial and multi-modal metrics, the prior knowledge resources and the plots.

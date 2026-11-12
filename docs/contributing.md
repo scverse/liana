@@ -12,7 +12,6 @@ the [scientific Python tutorials][], or the [scanpy developer guide][].
 [scanpy developer guide]: https://scanpy.scverse.org/page/dev/
 
 :::{tip} The _hatch_ project manager
-
 We highly recommend to familiarize yourself with [`hatch`][hatch].
 Hatch is a Python project manager that
 
@@ -23,14 +22,13 @@ Hatch is a Python project manager that
 
 While the project is setup with `hatch` in mind,
 it is still possible to use different tools to manage dependencies, such as `uv` or `pip`.
-
 :::
 
 [hatch]: https://hatch.pypa.io/latest/
 
 ## Installing dev dependencies
 
-In addition to the packages needed to _use_ this package,
+In addition to the packages needed to *use* this package,
 you need additional python packages to [run tests](#writing-tests) and [build the documentation](#docs-building).
 
 :::::{tab-set}
@@ -52,9 +50,9 @@ If you are using VS code, install the [hatch-code][] extension.
 Additionally, make sure that the `vscode-python-environments` extension is installed (should be by default)
 and `"python.useEnvironmentsExtension": true` is activated in your `settings.json`.
 
-Next, open the "Python Environment Managers" sidebar.
+Next, open the “Python Environment Managers” sidebar.
 You can do so by opening the command palette (Ctrl+Shift+P) and searching for `Python: Focus on Environment Managers View`.
-It will show a collapsible list where you can expand "Hatch"
+It will show a collapsible list where you can expand “Hatch”
 and activate an environment by clicking on the checkmark next to it.
 As the main development environment, we recommend to use `hatch-test` with the latest supported Python version.
 
@@ -100,8 +98,6 @@ hatch env find hatch-test.py3.14-stable
 ```
 
 and manually point it to the python binary.
-
-
 ::::
 
 ::::{tab-item} uv
@@ -121,7 +117,6 @@ uv sync --all-extras --all-groups
 ```
 
 The `.venv` directory is typically automatically discovered by IDEs such as VS Code.
-
 ::::
 
 ::::{tab-item} Pip
@@ -138,7 +133,6 @@ pip install -e ".[extras]" --group dev --group test --group doc
 ```
 
 The `.venv` directory is typically automatically discovered by IDEs such as VS Code.
-
 ::::
 :::::
 
@@ -166,7 +160,7 @@ prek will automatically download all dependencies when it is run for the first t
 If you didn’t run the checks locally, the `Pre-commit checks` job of the GitHub Actions CI runs them on your pull request and reports any failures.
 We strongly encourage installing and running the checks locally first to understand their usage.
 
-Finally, most editors have an _autoformat on save_ feature.
+Finally, most editors have an *autoformat on save* feature.
 Consider enabling this option for [ruff][ruff-editors] and [biome][biome-editors].
 
 ### Type checking
@@ -210,7 +204,6 @@ hatch test  # test with the highest supported Python version
 # or
 hatch test --all  # test with all supported Python versions
 ```
-
 ::::
 
 ::::{tab-item} uv
@@ -219,7 +212,6 @@ hatch test --all  # test with all supported Python versions
 ```bash
 uv run pytest
 ```
-
 ::::
 
 ::::{tab-item} Pip
@@ -229,7 +221,6 @@ uv run pytest
 source .venv/bin/activate
 pytest
 ```
-
 ::::
 :::::
 
@@ -269,7 +260,7 @@ Please adhere to [Semantic Versioning][semver], in brief
 >
 > Additional labels for pre-release and build metadata are available as extensions to the MAJOR.MINOR.PATCH format.
 
-To release, navigate to the "Releases" page of this project on GitHub, specify `vX.Y.Z` as a tag name and create a release.
+To release, navigate to the “Releases” page of this project on GitHub, specify `vX.Y.Z` as a tag name and create a release.
 For more information, see [managing GitHub releases][].
 This creates the git tag and triggers a Github workflow that builds the package with that version and publishes it on [PyPI][].
 Between tags, builds carry a development version such as `2.0.1.devN+g<sha>`; an editable install reports the version from install time, so reinstall after tagging.
@@ -329,7 +320,6 @@ please check out [this feature request][issue-render-notebooks] in the `cookiecu
 hatch run docs:build
 hatch run docs:open
 ```
-
 ::::
 
 ::::{tab-item} uv
@@ -340,7 +330,6 @@ cd docs
 uv run sphinx-build -M html . _build -W
 (xdg-)open _build/html/index.html
 ```
-
 ::::
 
 ::::{tab-item} Pip
@@ -352,6 +341,5 @@ cd docs
 sphinx-build -M html . _build -W
 (xdg-)open _build/html/index.html
 ```
-
 ::::
 :::::

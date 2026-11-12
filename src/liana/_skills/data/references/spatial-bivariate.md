@@ -48,13 +48,13 @@ Returns a **new** AnnData (obs = spots, var = interactions named `LIG^REC`):
 `li.mt.bivariate.show_functions()` lists them. `global_name`: `"morans"`, `"lee"`, or a list.
 
 `n_perms`: `None` no p-values; `>0` permutation p-values (the slow part); `0` analytical p-values,
-which need `local_name="morans"` too -- Moran's R only. `mask_negatives=True` zeroes scores and sets
+which need `local_name="morans"` too – Moran’s R only. `mask_negatives=True` zeroes scores and sets
 p to 1 wherever the category is not high-high. `use_raw` and `layer` are keyword-only extras, not
 positional.
 
 ## Footguns
 
-- Missing `obsp["spatial_connectivities"]` raises: always run `spatial_neighbors` first. A _stale_
+- Missing `obsp["spatial_connectivities"]` raises: always run `spatial_neighbors` first. A *stale*
   graph under that key is reused silently, so re-run it after changing the coordinates, `bandwidth`
   or the subset of cells.
 - Several slides concatenated share coordinate space and produce false neighbours: run

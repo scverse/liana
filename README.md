@@ -28,7 +28,7 @@ LIANA+ provides an [Agent Skill](https://docs.claude.com/en/docs/claude-code/ski
 liana-install-skills
 ```
 
-The command comes with `pip install liana`, so run it from any Python environment that has liana. It copies the skill to `~/.claude/skills/liana/`, where Claude Code picks it up automatically in every project and directory; type `/skills` in Claude Code to confirm `liana` is listed. After upgrading liana, refresh the copy with `liana-install-skills --force`. Then ask Claude Code for liana tasks in plain words ("which cell types signal to which in this Xenium slide", "compare interactions between conditions", "run this on mouse") and the skill is consulted automatically.
+The command comes with `pip install liana`, so run it from any Python environment that has liana. It copies the skill to `~/.claude/skills/liana/`, where Claude Code picks it up automatically in every project and directory; type `/skills` in Claude Code to confirm `liana` is listed. After upgrading liana, refresh the copy with `liana-install-skills --force`. Then ask Claude Code for liana tasks in plain words (“which cell types signal to which in this Xenium slide”, “compare interactions between conditions”, “run this on mouse”) and the skill is consulted automatically.
 
 ## Decision Tree
 
@@ -107,10 +107,9 @@ flowchart TD
 
 This tree is a guide rather than an exhaustive map: the methods are modular and can be adapted or combined across data types and questions, and all of them typically build on curated prior knowledge (see the [prior knowledge](https://liana.readthedocs.io/en/latest/tutorials/notebooks/prior_knowledge.html) tutorial for working with ligand–receptor and other resources).
 
-
 ## API
 
-For further information please check LIANA's [API documentation](https://liana.readthedocs.io/en/latest/api.html).
+For further information please check LIANA’s [API documentation](https://liana.readthedocs.io/en/latest/api.html).
 
 ## Cite LIANA+:
 

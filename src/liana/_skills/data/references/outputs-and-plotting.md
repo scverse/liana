@@ -3,26 +3,26 @@
 ## The result table
 
 `adata.uns["liana_res"]` (or the returned DataFrame) has one row per source cell type, target cell
-type and LR pair. **A single method** (`li.mt.cellphonedb`, `natmi`, ...) gives `source`, `target`,
+type and LR pair. **A single method** (`li.mt.cellphonedb`, `natmi`, …) gives `source`, `target`,
 `ligand_complex`, `receptor_complex`, `ligand`, `receptor` (the least-expressed subunit),
 `ligand_means`, `ligand_props`, `receptor_means`, `receptor_props`, then its score columns.
-**`rank_aggregate`** gives those same key and per-entity columns, then each aggregated method's
+**`rank_aggregate`** gives those same key and per-entity columns, then each aggregated method’s
 score columns plus `magnitude_rank` and `specificity_rank`. It does not carry the per-entity
 intermediates only one method computes (`ligand_zscores`, `ligand_logfc`, `ligand_means_sums`)
 unless `supp_columns=` asks for them, as with a single method.
 `by_sample` adds a column named after `sample_key`.
 
-| method              | magnitude        | specificity        | lower is better |
-| ------------------- | ---------------- | ------------------ | --------------- |
-| `rank_aggregate`    | `magnitude_rank` | `specificity_rank` | both            |
-| `cellphonedb`       | `lr_means`       | `cellphone_pvals`  | p-value         |
-| `cellchat`          | `lr_probs`       | `cellchat_pvals`   | p-value         |
-| `geometric_mean`    | `lr_gmeans`      | `gmean_pvals`      | p-value         |
-| `natmi`             | `expr_prod`      | `spec_weight`      | neither         |
-| `connectome`        | `expr_prod`      | `scaled_weight`    | neither         |
-| `logfc`             | none             | `lr_logfc`         | neither         |
-| `singlecellsignalr` | `lrscore`        | none               | no              |
-| `scseqcomm`         | `inter_score`    | none               | no              |
+  | method              | magnitude        | specificity        | lower is better |
+  | ------------------- | ---------------- | ------------------ | --------------- |
+  | `rank_aggregate`    | `magnitude_rank` | `specificity_rank` | both            |
+  | `cellphonedb`       | `lr_means`       | `cellphone_pvals`  | p-value         |
+  | `cellchat`          | `lr_probs`       | `cellchat_pvals`   | p-value         |
+  | `geometric_mean`    | `lr_gmeans`      | `gmean_pvals`      | p-value         |
+  | `natmi`             | `expr_prod`      | `spec_weight`      | neither         |
+  | `connectome`        | `expr_prod`      | `scaled_weight`    | neither         |
+  | `logfc`             | none             | `lr_logfc`         | neither         |
+  | `singlecellsignalr` | `lrscore`        | none               | no              |
+  | `scseqcomm`         | `inter_score`    | none               | no              |
 
 `li.mt.get_method_scores()` returns this as `{score: lower_is_better}`;
 `li.mt.process_scores(liana_res, score_key="magnitude_rank")` applies `-log10` to such scores so

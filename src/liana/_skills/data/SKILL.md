@@ -59,17 +59,17 @@ if "spatial" in a.obsm:
 
 ## Selection
 
-| Data and aim                                                                                                   | Read                                                          |
-| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Dissociated single cells, one dataset: rank LR interactions between cell types                                 | [single-cell-lr.md](references/single-cell-lr.md)             |
-| Dissociated single cells, several samples or conditions: what changes between them                             | [multisample.md](references/multisample.md)                   |
-| Spatial spots (Visium) or cells: where do ligand and receptor co-vary in space, local and global scores        | [spatial-bivariate.md](references/spatial-bivariate.md)       |
-| Spatial single cells with cell-type labels (Xenium, MERFISH, CosMx): which types signal to which via which LRs | [inflow.md](references/inflow.md)                             |
-| Spatial single cells: at what distance do interactions occur, spatial scale of cell-type pairs                 | [lric.md](references/lric.md)                                 |
-| Spatial, unsupervised: what in a spot's neighbourhood predicts its expression, multi-view learning             | [misty.md](references/misty.md)                               |
-| Metabolite-mediated CCC, estimated from RNA or measured (MSI)                                                  | [metabolites.md](references/metabolites.md)                   |
-| Resources, organism translation, custom LR lists, gene sets from LRs                                           | [prior-knowledge.md](references/prior-knowledge.md)           |
-| Reading `liana_res`, score semantics, plotting                                                                 | [outputs-and-plotting.md](references/outputs-and-plotting.md) |
+  | Data and aim                                                                                                   | Read                                                          |
+  | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+  | Dissociated single cells, one dataset: rank LR interactions between cell types                                 | [single-cell-lr.md](references/single-cell-lr.md)             |
+  | Dissociated single cells, several samples or conditions: what changes between them                             | [multisample.md](references/multisample.md)                   |
+  | Spatial spots (Visium) or cells: where do ligand and receptor co-vary in space, local and global scores        | [spatial-bivariate.md](references/spatial-bivariate.md)       |
+  | Spatial single cells with cell-type labels (Xenium, MERFISH, CosMx): which types signal to which via which LRs | [inflow.md](references/inflow.md)                             |
+  | Spatial single cells: at what distance do interactions occur, spatial scale of cell-type pairs                 | [lric.md](references/lric.md)                                 |
+  | Spatial, unsupervised: what in a spot’s neighbourhood predicts its expression, multi-view learning             | [misty.md](references/misty.md)                               |
+  | Metabolite-mediated CCC, estimated from RNA or measured (MSI)                                                  | [metabolites.md](references/metabolites.md)                   |
+  | Resources, organism translation, custom LR lists, gene sets from LRs                                           | [prior-knowledge.md](references/prior-knowledge.md)           |
+  | Reading `liana_res`, score semantics, plotting                                                                 | [outputs-and-plotting.md](references/outputs-and-plotting.md) |
 
 The table is a starting point, not a rule: methods are modular and combine. Multi-modal input is
 not a branch. Every method takes a `MuData`; each file ends with a Variants section saying how, and
@@ -115,6 +115,6 @@ metabolites, neurotransmitters, hormones or lipids, or has such a modality: read
 
 Always cite LIANA+ (Dimitrov et al., Nat Cell Biol 2024, doi:10.1038/s41556-024-01469-w) plus the
 original paper of the method and resource used: `li.mt.<method>.reference` holds each single-cell
-method's citation, and `li.rs.show_resources()` names the resource databases. For the consensus resource
+method’s citation, and `li.rs.show_resources()` names the resource databases. For the consensus resource
 and rank aggregate also cite Dimitrov et al., Nat Commun 2022 (doi:10.1038/s41467-022-30755-0). Inflow and
 LRIC are unpublished (Alsayah et al., in preparation): cite LIANA+ for them meanwhile.

@@ -1,7 +1,7 @@
 # Inflow: which cell types signal to which, at single-cell resolution
 
 Aim: per receiver cell, a score for every (sender cell type, ligand, receptor) triple, i.e. bivariate
-interactions extended with the sender's identity. Needs cell-resolution data with cell-type labels
+interactions extended with the sender’s identity. Needs cell-resolution data with cell-type labels
 (Xenium, MERFISH, CosMx) or deconvolution proportions. Tutorials: `inflow_score`, `inflow_mofaflex`.
 Unpublished extension (Alsayah et al., in preparation): cite LIANA+ meanwhile.
 

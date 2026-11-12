@@ -17,6 +17,7 @@ The public API is organized into six namespaces: `li.mt` (methods), `li.pp`
 Ligand-receptor method instances provide helper functions and consistent
 attributes, to describe each method instance, and are callable:
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. module:: liana.mt
 .. currentmodule:: liana.mt
@@ -34,6 +35,7 @@ attributes, to describe each method instance, and are callable:
     scseqcomm.__call__
     rank_aggregate.__call__
 ```
+<!-- panache-ignore-format-end -->
 
 ### Method metadata
 
@@ -41,17 +43,18 @@ attributes, to describe each method instance, and are callable:
 .. currentmodule:: liana.mt
 
 .. autosummary::
-    :toctree: generated
+   :toctree: generated
 
-    show_methods
-    get_method_scores
-    process_scores
-    AggregateClass
-    aggregate_meta
+   show_methods
+   get_method_scores
+   process_scores
+   AggregateClass
+   aggregate_meta
 ```
 
 ### Local bivariate metrics
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. currentmodule:: liana.mt
 
@@ -61,9 +64,11 @@ attributes, to describe each method instance, and are callable:
     bivariate.__call__
     compute_global_specificity
 ```
+<!-- panache-ignore-format-end -->
 
 ### Spatial proximity & interaction metrics
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. currentmodule:: liana.mt
 
@@ -76,9 +81,11 @@ attributes, to describe each method instance, and are callable:
     get_lric_auc
     get_lric_divergence
 ```
+<!-- panache-ignore-format-end -->
 
 ### Learn Spatial Relationships
 
+<!-- panache-ignore-format-start -->
 ```{eval-rst}
 .. currentmodule:: liana.mt
 
@@ -90,6 +97,7 @@ attributes, to describe each method instance, and are callable:
     genericMistyData
     lrMistyData
 ```
+<!-- panache-ignore-format-end -->
 
 #### Single-view models
 
@@ -100,12 +108,12 @@ Passed as `model=` when calling a `MistyData` object:
 .. currentmodule:: liana.method.sp
 
 .. autosummary::
-    :toctree: generated
+   :toctree: generated
 
-    SingleViewModel
-    LinearModel
-    RandomForestModel
-    RobustLinearModel
+   SingleViewModel
+   LinearModel
+   RandomForestModel
+   RobustLinearModel
 ```
 
 ### Intracellular & multi-sample helpers
@@ -114,11 +122,11 @@ Passed as `model=` when calling a `MistyData` object:
 .. currentmodule:: liana.mt
 
 .. autosummary::
-    :toctree: generated
+   :toctree: generated
 
-    find_causalnet
-    estimate_metalinks
-    df_to_lr
+   find_causalnet
+   estimate_metalinks
+   df_to_lr
 ```
 
 ## Preprocessing (`li.pp`)
@@ -128,16 +136,16 @@ Passed as `model=` when calling a `MistyData` object:
 .. currentmodule:: liana.pp
 
 .. autosummary::
-    :toctree: generated
+   :toctree: generated
 
-    obsm_to_adata
-    zi_minmax
-    neg_to_zero
-    spatial_neighbors
-    spatial_pair_proximity
-    expand_coordinates
-    query_bandwidth
-    interpolate_adata
+   obsm_to_adata
+   zi_minmax
+   neg_to_zero
+   spatial_neighbors
+   spatial_pair_proximity
+   expand_coordinates
+   query_bandwidth
+   interpolate_adata
 ```
 
 ## Multi-Sample (`li.ms`)
@@ -147,18 +155,18 @@ Passed as `model=` when calling a `MistyData` object:
 .. currentmodule:: liana.ms
 
 .. autosummary::
-    :toctree: generated
+   :toctree: generated
 
-    to_tensor_c2c
-    adata_to_views
-    lrs_to_views
-    lrdata_to_mudata
-    filter_view_markers
-    nmf
-    estimate_elbow
-    get_factor_scores
-    get_variable_loadings
-    mdata_to_anndata
+   to_tensor_c2c
+   adata_to_views
+   lrs_to_views
+   lrdata_to_mudata
+   filter_view_markers
+   nmf
+   estimate_elbow
+   get_factor_scores
+   get_variable_loadings
+   mdata_to_anndata
 ```
 
 ## Prior knowledge (`li.rs`)
@@ -168,18 +176,18 @@ Passed as `model=` when calling a `MistyData` object:
 .. currentmodule:: liana.rs
 
 .. autosummary::
-    :toctree: generated
+   :toctree: generated
 
-    select_resource
-    show_resources
-    generate_lr_geneset
-    translate_resource
-    translate_column
-    get_hcop_orthologs
-    get_metalinks
-    describe_metalinks
-    get_metalinks_values
-    build_prior_network
+   select_resource
+   show_resources
+   generate_lr_geneset
+   translate_resource
+   translate_column
+   get_hcop_orthologs
+   get_metalinks
+   describe_metalinks
+   get_metalinks_values
+   build_prior_network
 ```
 
 ## Datasets (`li.ds`)
@@ -189,17 +197,17 @@ Passed as `model=` when calling a `MistyData` object:
 .. currentmodule:: liana.ds
 
 .. autosummary::
-    :toctree: generated
+   :toctree: generated
 
-    kang_2018
-    kuppe_2022
-    citeseq_pbmc5k
-    vicari_2024
-    yao_2023
-    generate_toy_adata
-    generate_toy_spatial
-    generate_toy_mdata
-    sample_lrs
+   kang_2018
+   kuppe_2022
+   citeseq_pbmc5k
+   vicari_2024
+   yao_2023
+   generate_toy_adata
+   generate_toy_spatial
+   generate_toy_mdata
+   sample_lrs
 ```
 
 ## Visualization (`li.pl`)
@@ -209,19 +217,19 @@ Passed as `model=` when calling a `MistyData` object:
 .. currentmodule:: liana.pl
 
 .. autosummary::
-    :toctree: generated
+   :toctree: generated
 
-    dotplot
-    dotplot_by_sample
-    tileplot
-    elbow
-    circle_plot
-    connectivity
-    misty_target_metrics
-    misty_contributions
-    misty_interactions
-    annulus
-    lric_lineplot
-    lric_divergence
-    feature_by_group
+   dotplot
+   dotplot_by_sample
+   tileplot
+   elbow
+   circle_plot
+   connectivity
+   misty_target_metrics
+   misty_contributions
+   misty_interactions
+   annulus
+   lric_lineplot
+   lric_divergence
+   feature_by_group
 ```
