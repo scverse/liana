@@ -30,4 +30,4 @@ Please cite the framework paper {cite:p}`Dimitrov_2024`, and the 2022 benchmark 
 }
 ```
 
-Please also cite the individual methods and resources you relied on. Each method's docstring names its original publication.
+Please also cite the individual methods and resources you relied on. Each method’s docstring names its original publication.

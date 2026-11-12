@@ -18,22 +18,22 @@ Always show the top hits with `li.pl.dotplot` (arguments in `outputs-and-plottin
 `geometric_mean`, `scseqcomm` share this exact signature. `li.mt.show_methods()` lists them with
 their score columns and references. `rank_aggregate` aggregates five of them (CellPhoneDB,
 Connectome, log2FC, NATMI, SingleCellSignalR) into `magnitude_rank` and `specificity_rank`, both
-"lower is better", plus each sub-method's own score columns. It keeps the per-entity columns
+“lower is better”, plus each sub-method’s own score columns. It keeps the per-entity columns
 (`ligand`, `receptor`, `*_means`, `*_props`) that a single method returns, so the same plots and
 filters work on either; see `outputs-and-plotting.md`.
 
-| arg                                         | default           | note                                                                                                                                                                 |
-| ------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `groupby`                                   | required          | `obs` column with cell types; groups with fewer than `min_cells=5` cells are dropped with a warning                                                                  |
-| `expr_prop`                                 | 0.05              | LR pairs whose ligand or receptor (any subunit) is expressed in fewer cells of the group are dropped. `return_all_lrs=True` keeps them with the worst observed score |
-| `n_perms`                                   | 1000              | permutations for p-values. `None` skips them: no p-value columns, and `rank_aggregate` aggregates `specificity_rank` from the permutation-free scores only           |
-| `use_raw`, `layer`                          | False, None       | which matrix; log1p-normalised, non-negative                                                                                                                         |
-| `resource_name`, `resource`, `interactions` | consensus         | see prior-knowledge.md; `interactions=[("L","R"), ...]` overrides both others                                                                                        |
-| `groupby_pairs`                             | None              | DataFrame with `source`, `target` columns: score only those cell-type pairs                                                                                          |
-| `key_added`, `inplace`                      | "liana_res", True | `inplace=False` returns the DataFrame                                                                                                                                |
+  | arg                                         | default           | note                                                                                                                                                                 |
+  | ------------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `groupby`                                   | required          | `obs` column with cell types; groups with fewer than `min_cells=5` cells are dropped with a warning                                                                  |
+  | `expr_prop`                                 | 0.05              | LR pairs whose ligand or receptor (any subunit) is expressed in fewer cells of the group are dropped. `return_all_lrs=True` keeps them with the worst observed score |
+  | `n_perms`                                   | 1000              | permutations for p-values. `None` skips them: no p-value columns, and `rank_aggregate` aggregates `specificity_rank` from the permutation-free scores only           |
+  | `use_raw`, `layer`                          | False, None       | which matrix; log1p-normalised, non-negative                                                                                                                         |
+  | `resource_name`, `resource`, `interactions` | consensus         | see prior-knowledge.md; `interactions=[("L","R"), ...]` overrides both others                                                                                        |
+  | `groupby_pairs`                             | None              | DataFrame with `source`, `target` columns: score only those cell-type pairs                                                                                          |
+  | `key_added`, `inplace`                      | “liana_res”, True | `inplace=False` returns the DataFrame                                                                                                                                |
 
-Magnitude scores answer "how strongly expressed is this pair", specificity scores "how specific is it
-to this pair of cell types". Read `outputs-and-plotting.md` for the per-method columns and the plots.
+Magnitude scores answer “how strongly expressed is this pair”, specificity scores “how specific is it
+to this pair of cell types”. Read `outputs-and-plotting.md` for the per-method columns and the plots.
 
 ## Footguns
 

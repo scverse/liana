@@ -6,11 +6,11 @@ Tutorial: `LRIC_tutorial`. Unpublished extension (Alsayah et al., in preparation
 
 ## Three modes, two arguments
 
-| mode                      | call                                                        | adds                                                               |
-| ------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------ |
-| tissue architecture only  | `li.mt.cross_pcf(adata, groupby="cell_type")`               | `source`, `target`, `interaction`, `radius`, `g`                   |
-| LR, cell-type agnostic    | `li.mt.lric(adata, resource_name=...)`                      | `ligand_complex`, `receptor_complex`, `interaction`, `radius`, `g` |
-| LR, directed by cell type | `li.mt.lric(adata, resource_name=..., groupby="cell_type")` | plus `source`, `target`, `g_expr`, `g_pcf`                         |
+  | mode                      | call                                                        | adds                                                               |
+  | ------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------ |
+  | tissue architecture only  | `li.mt.cross_pcf(adata, groupby="cell_type")`               | `source`, `target`, `interaction`, `radius`, `g`                   |
+  | LR, cell-type agnostic    | `li.mt.lric(adata, resource_name=...)`                      | `ligand_complex`, `receptor_complex`, `interaction`, `radius`, `g` |
+  | LR, directed by cell type | `li.mt.lric(adata, resource_name=..., groupby="cell_type")` | plus `source`, `target`, `g_expr`, `g_pcf`                         |
 
 In the directed mode `g_pcf` equals cross-PCF and `g` is the expression-weighted curve, so `g > 1` can
 only come from cells that express the ligand and receptor. Results land in `adata.uns["lric"]` /
@@ -30,7 +30,7 @@ li.mt.lric(adata, resource_name="mouseconsensus", groupby="cell_type")   # radii
 - `min_cells=None` drops cell types making up 1% or less of the cells; pass an integer to override.
 - `nz_prop` applies in the agnostic mode (fraction of all cells), `expr_prop` in the directed mode
   (fraction within each cell type). Masked pairs stay as NaN rows.
-- `groupby_pairs` and `cell_types` restrict which pairs are _emitted_, not which cells are used
+- `groupby_pairs` and `cell_types` restrict which pairs are *emitted*, not which cells are used
   (the null conditions on the whole slide), so they do not make the call faster.
 - Weights are the expression as given; per-gene rescaling cancels in `g(r)`. To weight by a nonlinear
   transform (e.g. `sqrt`), store it in a layer and pass `layer=`.

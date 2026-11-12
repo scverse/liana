@@ -50,7 +50,6 @@ Ask a question on the scverse forum.
 
 Read the source, report a bug, or open a pull request.
 :::
-
 ::::
 
 ## Citation
@@ -73,7 +72,7 @@ If you like scverse® and want to support our mission, please consider making a 
   <img
     src="https://raw.githubusercontent.com/numfocus/templates/master/images/numfocus-logo.png"
     width="200"
-  >
+>
 </a>
 </div>
 
