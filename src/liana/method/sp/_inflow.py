@@ -55,6 +55,10 @@ class SpatialInflow:
         use_raw: bool = V.use_raw,
         layer: str | None = V.layer,
         xy_sep: str = V.lr_sep,
+        competition_alpha: float = 0.0,
+        competition_beta: float = 0.0,
+        competition_kappa_alpha: float = 0.5,
+        competition_kappa_beta: float = 0.5,
         verbose: bool | None = V.verbose,
         **kwargs: object,
     ) -> AnnData:
@@ -91,6 +95,16 @@ class SpatialInflow:
             Function used to transform the receptor values.
             If None, no transformation is applied. Whether a transformation helps is data-dependent;
             :func:`liana.pp.zi_minmax` is the usual choice.
+        competition_alpha : float, default 0
+            Strength of receptor-side competition. 0 returns raw inflow; 1 is full competition
+            (shares sum to the receptor's expression); 0.25-0.5 is a moderate correction.
+        competition_beta : float, default 0
+            Strength of ligand-side competition. Same scale as `competition_alpha`.
+        competition_kappa_alpha : float, default 0.5
+            Half-saturation level for receptor-side competition, in expression units. Depends on the
+            data's scale (0.5 suits log-normalized data); with kappa < 1, scores in low-load cells can increase.
+        competition_kappa_beta : float, default 0.5
+            The same for ligand-side competition, relative to the receptor available around each sender.
         %(verbose)s
 
         **kwargs : dict, optional
@@ -282,6 +296,19 @@ class SpatialInflow:
         # Optionally transform the ligand * celltype data (no-op if `x_transform` is None)
         ls = self._transform(stacked, x_transform, **x_transform_kwargs)
 
+        # Transform receptor matrix
+        r = self._transform(y_mat, y_transform, **y_transform_kwargs)
+
+        # Competition normalization: both loads are computed from the un-normalized ls and r
+        if competition_alpha or competition_beta:
+            wn = _row_normalize(w)
+            receptors = pd.Categorical(xy_stats[y_name]).codes
+            ligands = pd.Categorical(xy_stats[x_name]).codes
+            d = _receptor_load(wn, ls, receptors) if competition_alpha else None
+            e = _ligand_load(wn, r, ligands) if competition_beta else None
+            ls = _apply_competition(ls, e, ligands, competition_kappa_beta, competition_beta)
+            r = _apply_competition(r, d, receptors, competition_kappa_alpha, competition_alpha)
+
         wls = w.dot(ls)
 
         # Normalize by row sums (avoid division by zero)
@@ -292,9 +319,6 @@ class SpatialInflow:
 
         # Clean NaNs in sparse matrix (if any)
         wls.data[np.isnan(wls.data)] = 0
-
-        # Transform receptor matrix
-        r = self._transform(y_mat, y_transform, **y_transform_kwargs)
 
         # repeat across cell types
         ri = hstack([r] * k)  # replicate across k cell types - changed
@@ -354,6 +378,41 @@ def _pop_kwargs(kwargs: dict[str, object], key: str) -> dict[str, object]:
     if not isinstance(nested, dict):
         raise TypeError(f"`{key}` must be a dict, got {type(nested).__name__}.")
     return nested
+
+
+def _row_normalize(w: csr_matrix) -> csr_matrix:
+    """Divide each row of the connectivity matrix by its sum (empty rows stay zero), as inflow does."""
+    row_sums = np.asarray(w.sum(axis=1)).ravel()
+    row_sums[row_sums == 0] = 1.0
+    return csr_matrix(w.multiply(1.0 / row_sums.reshape(-1, 1)))
+
+
+def _one_hot(codes: np.ndarray) -> csr_matrix:
+    """Sparse (n_columns, n_entities) indicator that maps each column to its entity code."""
+    return csr_matrix((np.ones(len(codes)), (np.arange(len(codes)), codes)))
+
+
+def _receptor_load(wn: csr_matrix, ls: csr_matrix, receptors: np.ndarray) -> np.ndarray:
+    """Ligand reaching each cell from all senders and all ligands of a receptor: (n_cells, n_receptors)."""
+    k = ls.shape[1] // len(receptors)
+    return (wn @ csr_matrix(ls @ _one_hot(np.tile(receptors, k)))).toarray()
+
+
+def _ligand_load(wn: csr_matrix, r: csr_matrix, ligands: np.ndarray) -> np.ndarray:
+    """Receptor around each sender, summed over all receptors of a ligand: (n_cells, n_ligands)."""
+    return (wn.T @ csr_matrix(r @ _one_hot(ligands))).toarray()
+
+
+def _apply_competition(
+    mat: csr_matrix, load: np.ndarray | None, codes: np.ndarray, kappa: float, power: float
+) -> csr_matrix:
+    """Scale each non-zero of a (n_cells, k * n_pairs) matrix by (kappa + load[cell, entity of its pair]) ** -power."""
+    if not power or load is None:
+        return mat
+    mat = csr_matrix(mat, dtype=float, copy=True)
+    rows = np.repeat(np.arange(mat.shape[0]), np.diff(mat.indptr))
+    mat.data *= (kappa + load[rows, codes[mat.indices % len(codes)]]) ** -power
+    return mat
 
 
 inflow = SpatialInflow()
