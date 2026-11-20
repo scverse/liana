@@ -334,3 +334,61 @@ def test_mudata_transform_kwargs(toy_mdata: MuData) -> None:
         )
     )
     assert get_x(lrdata).max() <= 0.22, f"Expected max <= 0.22, got {get_x(lrdata).max()}"
+
+
+@pytest.fixture
+def competition_adata() -> tuple[AnnData, pd.DataFrame]:
+    """Two cell types, ligands L1-L3 and receptors R1-R2, where R1 and L2 are each shared by two pairs."""
+    from sklearn.neighbors import kneighbors_graph
+
+    rng = np.random.default_rng(0)
+    n = 60
+    adata = AnnData(
+        X=csr_matrix(rng.poisson(1.0, (n, 5)).astype(float)),
+        obs=pd.DataFrame({"ct": rng.choice(["A", "B"], n)}, index=[f"c{i}" for i in range(n)]),
+        var=pd.DataFrame(index=["L1", "L2", "L3", "R1", "R2"]),
+    )
+    adata.obsp["spatial_connectivities"] = kneighbors_graph(rng.random((n, 2)), 5, include_self=True)
+    resource = pd.DataFrame({"ligand": ["L1", "L2", "L2", "L3"], "receptor": ["R1", "R1", "R2", "R2"]})
+    return adata, resource
+
+
+def test_inflow_competition(competition_adata: tuple[AnnData, pd.DataFrame]) -> None:
+    """Competition-normalized inflow matches a brute-force computation of both loads."""
+    adata, resource = competition_adata
+    alpha, beta, kappa_a, kappa_b = 0.5, 0.25, 0.3, 0.7
+
+    # Brute force: row-normalized W, receptor load D and ligand load E
+    x = pd.DataFrame(to_dense(get_x(adata)), columns=adata.var_names)
+    w = to_dense(adata.obsp["spatial_connectivities"])
+    wn = w / w.sum(axis=1, keepdims=True)
+    lig_of = resource.groupby("receptor")["ligand"].apply(list)
+    rec_of = resource.groupby("ligand")["receptor"].apply(list)
+    d = {r: wn @ x[ls].sum(axis=1).to_numpy() for r, ls in lig_of.items()}
+    e = {l: wn.T @ x[rs].sum(axis=1).to_numpy() for l, rs in rec_of.items()}
+
+    def expected(a: float, b: float) -> pd.DataFrame:
+        cols = {}
+        for s, (l, r) in product(["A", "B"], resource.to_numpy()):
+            sender = (get_obs(adata)["ct"] == s).to_numpy() * x[l].to_numpy() / (kappa_b + e[l]) ** b
+            cols[f"{s}^{l}^{r}"] = x[r].to_numpy() * (wn @ sender) / (kappa_a + d[r]) ** a
+        return pd.DataFrame(cols)
+
+    base = as_anndata(inflow(adata, groupby="ct", resource=resource, use_raw=False, nz_prop=0))
+    for a, b in [(0, 0), (alpha, 0), (0, beta), (alpha, beta)]:
+        lrdata = as_anndata(
+            inflow(
+                adata,
+                groupby="ct",
+                resource=resource,
+                use_raw=False,
+                nz_prop=0,
+                competition_alpha=a,
+                competition_beta=b,
+                competition_kappa_alpha=kappa_a,
+                competition_kappa_beta=kappa_b,
+            )
+        )
+        np.testing.assert_allclose(to_dense(get_x(lrdata)), expected(a, b)[lrdata.var_names].to_numpy(), rtol=1e-6)
+        # sparsity pattern is unchanged
+        np.testing.assert_array_equal(to_dense(get_x(lrdata)) != 0, to_dense(get_x(base)) != 0)
