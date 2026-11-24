@@ -42,7 +42,7 @@ def test_mdata_transformations(toy_mdata: MuData) -> None:
     # test non-negative
     from scanpy.preprocessing import scale
 
-    scale(toy_mdata.mod["adata_x"])
+    scale(as_anndata(toy_mdata.mod["adata_x"]))
 
     adata = mdata_to_anndata(
         toy_mdata, x_mod="adata_x", y_mod="adata_y", x_transform=neg_to_zero, y_transform=None, verbose=False

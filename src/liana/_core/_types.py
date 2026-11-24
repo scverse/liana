@@ -50,6 +50,17 @@ def get_x(adata: AnnData) -> MatrixLike:
     return _to_matrix(adata.X, what="adata.X")
 
 
+def scale_matrix(x: MatrixLike, *, zero_center: bool = True, max_value: float | None = None) -> MatrixLike:
+    """Run :func:`scanpy.pp.scale` on a matrix, narrowing its return to a :data:`MatrixLike`.
+
+    :func:`scanpy.pp.scale` returns ``AnnData | array | ScaleResult | None`` depending on its input and arguments;
+    for matrix input it is always the scaled matrix.
+    """
+    import scanpy as sc
+
+    return _to_matrix(sc.pp.scale(x, zero_center=zero_center, max_value=max_value), what="sc.pp.scale(x)")
+
+
 type RowFilter = Callable[[pd.Series], bool]
 """Predicate applied row-wise to a results frame (``df.apply(fn, axis=1)``)."""
 

@@ -27,7 +27,7 @@ from liana._core._pipe_utils._get_mean_perms import (
     _trimean,
 )
 from liana._core._pipe_utils._pre import _choose_mtx_rep
-from liana._core._types import get_obs, get_x
+from liana._core._types import get_obs, get_x, scale_matrix
 from liana.multisample.mdata_to_anndata import mdata_to_anndata
 from liana.preprocessing.spatial_neighbors import spatial_pair_proximity
 from liana.resource._reassemble_complexes import _explode_complexes, _filter_reassemble_complexes
@@ -503,7 +503,7 @@ def _get_lr(
     # Method-specific stats
     connectome_flag = (M.ligand_zscores in relevant_cols) | (M.receptor_zscores in relevant_cols)
     if connectome_flag:
-        adata.layers["scaled"] = sc.pp.scale(adata, copy=True).X
+        adata.layers["scaled"] = scale_matrix(get_x(adata).copy())
 
     logfc_flag = (M.ligand_logfc in relevant_cols) | (M.receptor_logfc in relevant_cols)
     if logfc_flag:
@@ -523,10 +523,8 @@ def _get_lr(
     # Calc pvals + other stats per gene or not
     rank_genes_bool = (C.ligand_pvals in relevant_cols) | (C.receptor_pvals in relevant_cols)
     if rank_genes_bool:
-        ranked = sc.tl.rank_genes_groups(adata, groupby=I.label, method=de_method, use_raw=False, copy=True)
-        if ranked is None:
-            raise RuntimeError("`scanpy.tl.rank_genes_groups(copy=True)` returned nothing.")
-        adata = ranked
+        adata = adata.copy()
+        sc.tl.rank_genes_groups(adata, groupby=I.label, method=de_method)
 
     obs = get_obs(adata)
     for label in labels:
