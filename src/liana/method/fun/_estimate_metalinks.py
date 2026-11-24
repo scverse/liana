@@ -32,7 +32,8 @@ def estimate_metalinks(
     adata
         Annotated data matrix.
     resource
-        Resource to use for ligand-receptor inference.
+        Resource to use for ligand-receptor inference, with the metabolites in a `ligand` (or `source`) column
+        and the receptors in the `y_name` column, e.g. as returned by :func:`liana.rs.get_metalinks` with `split=True`.
     pd_net
         Metabolic production-degradation network to use.
     t_net
@@ -63,7 +64,7 @@ def estimate_metalinks(
     >>> adata = li.ds.generate_toy_adata()
     >>> genes = adata.var_names[:16].tolist()
     >>> pd_net = pd.DataFrame({"source": np.repeat(["HMDB0000122", "HMDB0000148"], 8), "target": genes, "weight": 1.0})
-    >>> resource = pd.DataFrame({"source": ["HMDB0000122", "HMDB0000148"], "receptor": ["CD4", "ITGB2"]})
+    >>> resource = pd.DataFrame({"ligand": ["HMDB0000122", "HMDB0000148"], "receptor": ["CD4", "ITGB2"]})
     >>> mdata = li.mt.estimate_metalinks(adata, resource=resource, pd_net=pd_net)
 
     Metabolite abundances are estimated from the enzyme expression and returned in
@@ -74,6 +75,13 @@ def estimate_metalinks(
     `x_mod='metabolite'` and `y_mod='receptor'`. The metabolite scores are signed
     activities, so any liana single-cell method would need the scores to be pre-transformed.
     """
+    if "ligand" in resource.columns:
+        metabolite_col = "ligand"
+    elif "source" in resource.columns:
+        metabolite_col = "source"
+    else:
+        raise ValueError("`resource` must have its metabolites in a 'ligand' (or 'source') column.")
+
     dc = _check_if_installed(package_name="decoupler")
     ad = prep_check_adata(
         adata,
@@ -110,7 +118,7 @@ def estimate_metalinks(
     else:
         mmat = met_est
 
-    resource = resource[resource["source"].isin(mmat.columns)].copy()
+    resource = resource[resource[metabolite_col].isin(mmat.columns)].copy()
     receptor = ad[:, get_var(ad).index.isin(np.unique(resource[y_name]))]
 
     ad.obsm["mmat"] = mmat
