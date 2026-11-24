@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from scanpy.datasets import pbmc68k_reduced
 
-from liana._core._types import get_obs, get_raw_x, get_x
+from liana._core._types import get_obs, get_raw_x, get_x, scale_matrix
 from liana.preprocessing.spatial_neighbors import spatial_neighbors
 
 if TYPE_CHECKING:
@@ -63,7 +63,7 @@ def generate_toy_mdata() -> MuData:
     adata = adata[:, 0:10]
     sc.pp.filter_cells(adata, min_counts=1)
 
-    adata.layers["scaled"] = sc.pp.scale(get_x(adata), zero_center=True, max_value=5)
+    adata.layers["scaled"] = scale_matrix(get_x(adata), zero_center=True, max_value=5)
 
     adata_y = adata.copy()
 
